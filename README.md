@@ -16,7 +16,7 @@ matplotlib==3.5.1, numpy==1.21.6, pandas==1.3.5, parsimonious==0.10.0, scikit_le
 
 ### 2. Data Generation 
 - Please refer to [SUMO tutorials](https://sumo.dlr.de/docs/Tutorials/index.html) for quick installation guides. 
-- Once SUMO is successfully installed, please make sure the SUMO binary is located at `/usr/local/bin/sumo-gui/` for Ubuntu systems. 
+- Once SUMO is installed, please make sure the SUMO binary is located at `/usr/local/bin/sumo-gui/` for Ubuntu systems. 
 - First, follow the instruction at [OSMWebWizard](https://sumo.dlr.de/docs/Tutorials/OSMWebWizard.html) to generate SUMO demand and network files.  
 - Then, run the script `control_sumo.py` to generate the dataset. The saved file path can be defined at ln 22. 
 
