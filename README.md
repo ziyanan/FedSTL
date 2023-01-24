@@ -25,5 +25,21 @@ matplotlib==3.5.1, numpy==1.21.6, pandas==1.3.5, parsimonious==0.10.0, scikit_le
 - The script `sumo_dataset.py` includes the code for preprocessing the SUMO dataset. Please make sure that the data path is correctly defined. 
 
 ### 4. Specification Inference 
-- The folder telex include the code needed for specification inference, where `scorer.py` include STL metrics and the implementations of Equation 3 defined in the text. 
-Additionally, `synth.py` include the code for generating specifications from STL templates. 
+- The folder telex includes the code needed for specification inference, where `scorer.py` includes STL metrics and the implementations of Equation 3 defined in the text. 
+Additionally, `synth.py` includes the code for generating specifications from STL templates. 
+
+### 5. Network Training and Evaluation 
+- To train the FedAvg model on SUMO data, using the following command: 
+    ```
+    python3.9 fed_train.py --mode train --dataset sumo --client 100 --cluster 0 --frac 0.1
+    ```
+    Optional parameters:\
+    `--mode` Select the mode from these options: `train`, `train-logic`, `eval`, `eval-sumo`\
+    `--dataset` Use either sumo or fhwa\
+    `--client` The number of participating clients \
+    `--cluster` The total number of clusters \
+    `--frac` The client participation rate\
+    `--model` RNN, GRU, or LSTM backbone\
+    `--epoch` Number of total communication rounds\
+    `--batch_size` The batch size\
+    `--max_lr` Maximum learning rate\
