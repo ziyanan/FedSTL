@@ -1,9 +1,3 @@
-1. To construct dataset, use dataset.py.
-2. To train LSTM model, use train.py
-3. To train LSTM model with logic, use train.py --model train-logic
-4. To construct fed dataset, use dataset.py load_fed_dataset.
-
-
 FedSTL Implementation 
 ===============
 
@@ -43,3 +37,22 @@ Additionally, `synth.py` includes the code for generating specifications from ST
     `--epoch` Number of total communication rounds\
     `--batch_size` The batch size\
     `--max_lr` Maximum learning rate\
+
+- Similarly, to run the IFCA model on SUMO dataset with 5 clusters, run the following command: 
+    ```
+    python3.9 fed_train.py --mode train --dataset sumo --client 100 --cluster 5 --frac 0.1
+    ```
+
+- Finally, to run FedSTL on SUMO dataset with 5 clusters and multivariate correlation specifications, run the following command: 
+    ```
+    python3.9 fed_train.py --mode train-logic --dataset sumo --client 100 --cluster 5 --frac 0.1 --property_type corr --client_iter 15
+    ```
+
+- To evaluation, run either
+    ```
+    python3.9 fed_train.py --mode eval 
+    ```
+or
+    ```
+    python3.9 fed_train.py --mode eval-sumo
+    ```
