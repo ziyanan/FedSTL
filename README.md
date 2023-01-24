@@ -10,25 +10,8 @@ FedSTL Implementation
 This document serves as a step-by-step guide for running the FedSTL codebase. 
 
 ### 1. Dependencies
-The following packages are needed to run this repository: 
-
-matplotlib==3.5.1
-
-numpy==1.21.6
-
-pandas==1.3.5
-
-parsimonious==0.10.0
-
-scikit_learn==1.2.0
-
-scipy==1.10.0
-
-singledispatch==3.7.0
-
-torch==1.11.0
-
-tqdm==4.64.0
+- The following packages are needed to run this repository: 
+matplotlib==3.5.1, numpy==1.21.6, pandas==1.3.5, parsimonious==0.10.0, scikit_learn==1.2.0, scipy==1.10.0, singledispatch==3.7.0, torch==1.11.0, tqdm==4.64.0
 
 ### 2. Data Generation 
 - 
