@@ -18,48 +18,12 @@ matplotlib==3.5.1, numpy==1.21.6, pandas==1.3.5, parsimonious==0.10.0, scikit_le
 - Please refer to [SUMO tutorials](https://sumo.dlr.de/docs/Tutorials/index.html) for quick installation guides. 
 - Once SUMO is installed, please make sure the SUMO binary is located at `/usr/local/bin/sumo-gui/` for Ubuntu systems. 
 - First, follow the instruction at [OSMWebWizard](https://sumo.dlr.de/docs/Tutorials/OSMWebWizard.html) to generate SUMO demand and network files.  
-- Then, run the script `control_sumo.py` to generate the dataset. The saved file path can be defined at ln 22. 
+- Then, run the script `control_sumo.py` to generate the dataset. The saved file path can be defined at line 22. 
 
 ### 3. Data Preprocessing 
-- Once CARLA is installed and working. Create a new folder `data_generation` under the directory `carla/PythonAPI/`. Then add the files in this repo to the new folder. 
+- The script `dataset.py` includes the code for preprocessing the FHWA dataset. One can use the command `python3.9 dataset.py` to generate the splitted dataset. 
+- The script `sumo_dataset.py` includes the code for preprocessing the SUMO dataset. Please make sure that the data path is correctly defined. 
 
-- Use the command 
-    ```
-    cd carla/Unreal/CarlaUE4 &&
-    ~/UnrealEngine_4.24/Engine/Binaries/Linux/UE4Editor "$PWD/CarlaUE4.uproject" -opengl
-    ```
-    to launch a new CARLA server, then select a town you would like to use. Currently, we support Town 3, Town 4, and Town 5. 
-
-- Run the following command to spwan NPCs controlled by SUMO: 
-    ```
-    cd carla/Co-Simulation/Sumo/ &&
-    python3 spawn_npc_sumo.py --tls-manager carla --sumo-gui
-    ```
-    Use the optional parameter `-n, --number-of-vehicles` (default: 10) to change the number of vehicles you would like to spawn. 
-
-- Use the following command to start recording:
-    ```
-    cd carla/PythonAPI/data_generation/ &&
-	python3 recording.py
-    ```
-    Optional parameters:\
-    `-t` (default: 5) Town number\
-    `-v` (default: 500) Number of vehicles
-
-    By default, the log is stored under `carla/Unreal/CarlaUE4/Saved/`.
-
-- Once the log is recorded, run the script `carla/PythonAPI/data_generation/find_group.py` to replay and generate a group.txt that stores the ego vehicle IDs. 
-
-    Optional parameters:\
-    `-n` (default: 1) Intersection number\
-    `-v` (default: 500) Number of vehicles\
-    `-t` (default: 5) Town number
-
-    The intersection numbers can be found at `carla/PythonAPI/data_generation/town_maps`. 
-
-- To generate one scene, use the script `carla/PythonAPI/data_generation/carScene_data_generation.py`. 
-
-    Optional parameters:\
-    `-r` (default: 1) Line number in `group.txt`\
-    `-f` (default: sumo-carla-town5-500.log) Recorded file name\
-    `-t` (default: 5) Town number
+### 4. Specification Inference 
+- The folder telex include the code needed for specification inference, where `scorer.py` include STL metrics and the implementations of Equation 3 defined in the text. 
+Additionally, `synth.py` include the code for generating specifications from STL templates. 
