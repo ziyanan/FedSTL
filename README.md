@@ -3,6 +3,10 @@ FedSTL Implementation
 
 This document serves as a step-by-step guide for running the FedSTL codebase. 
 
+### TODO:
+- Fix dataloader, check dataloader length. 
+- Fix data normalization.
+
 ### 1. Dependencies
 - Python 3.9 and python-dev packages are required. 
 - The following additional packages are needed to run this repository: 
@@ -54,4 +58,3 @@ Additionally, `synth.py` includes the code for generating specifications from ST
 ### 6. Note
 - We include a sample of the dataset due to file size limitations of the supplementary material and the double blinded review policy. 
 However, the full dataset can be shared upon request. 
-
