@@ -1,11 +1,13 @@
+"""
+Util and helper functions for time series Transformer.
+Code adapted from https://github.com/KasperGroesLudvigsen/influenza_transformer/
+"""
 import torch
 import torch.nn as nn 
 import math
 from torch import nn, Tensor
 import torch.nn.functional as F
-"""
-Code adapted from https://github.com/KasperGroesLudvigsen/influenza_transformer/
-"""
+
 
 
 class PositionalEncoder(nn.Module):

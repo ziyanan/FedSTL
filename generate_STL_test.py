@@ -1,3 +1,7 @@
+"""
+Generate STL specifications with 
+specification mining in TeLEx format. 
+"""
 from telex import synth
 from telex import inputreader
 import telex.scorer as scorer

@@ -1,3 +1,6 @@
+"""
+Options for executing main file.
+"""
 import argparse
 from ast import parse
 

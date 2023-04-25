@@ -1,3 +1,9 @@
+"""
+Utils and settings for training. 
+Implementations for getting device, 
+loading data to device, saving models, 
+and loading dataset.
+"""
 import torch
 import numpy as np
 from IoTData import SequenceDataset
@@ -33,6 +39,9 @@ def save_model(path, model, model_name, epoch):
 
 
 def get_client_dataset(client_id, dataset_name):
+    """
+    Getting client dataset files by dataset name. 
+    """
     dataset_array = {}
     if dataset_name == 'fhwa':
         dataset_path = "/hdd/FHWA_dataset/torch_dataset/"
@@ -56,6 +65,10 @@ def get_client_dataset(client_id, dataset_name):
 
 
 def get_shared_dataset(client_id, dataset_name):
+    """
+    Getting client and shared dataset files by dataset name. 
+    Training data is seperated to a small shared group and a large private group.
+    """
     dataset_array = {}
     if dataset_name == 'fhwa':
         dataset_path = "/hdd/FHWA_dataset/torch_dataset/"

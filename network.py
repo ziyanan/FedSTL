@@ -1,12 +1,14 @@
-import math
+"""
+Prediction model implementations in PyTorch.
+Models include vanilla RNN, GRU, LSTM, and time series Transformers.
 
+Reference: Transformer implementation: https://pytorch.org/tutorials/beginner/transformer_tutorial.html 
+"""
+import math
 import torch
 import torch.nn as nn
 from torch import Tensor
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
-"""
-Transformer implementation: https://pytorch.org/tutorials/beginner/transformer_tutorial.html 
-"""
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

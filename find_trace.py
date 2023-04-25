@@ -1,11 +1,13 @@
+"""
+Correcting a prediction by STL specifications.
+Process different conditions by STL operators.
+"""
 import numpy as np
 import torch
 import telex.stl as stl
 import matplotlib.pyplot as plt
 np.set_printoptions(suppress=True, formatter={'float_kind':'{:f}'.format})
 torch.set_printoptions(sci_mode=False, precision=3)
-
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 

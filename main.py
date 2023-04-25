@@ -1,3 +1,7 @@
+"""
+The main file for training and evaluating FedSTL format
+with options to compare with other benchmarks.
+"""
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Python version: 3.9
@@ -22,6 +26,7 @@ torch.manual_seed(0)
 
 import matplotlib.pyplot as plt
 
+## save results to txt log file.
 # stdoutOrigin=sys.stdout 
 # sys.stdout = open("log.txt", "a")
 

@@ -1,3 +1,8 @@
+"""
+Preprocessing dataset.
+Filling missing data, converting raw txt data to json and numpy format.
+Saving numpy files to training, val, and testing set.
+"""
 import os
 import json
 import random
@@ -13,9 +18,6 @@ from utils.highway_traffic_monitoring import load_monthly_data, find_station_mon
 
 
 
-"""
-preprocess dataset
-"""
 DATA_DIR = "/hdd/traffic_data_2019/"
 PROC_DIR = "/hdd/FHWA_dataset/processed/"
 JSON_DIR = "/hdd/FHWA_dataset/json/"
@@ -57,7 +59,7 @@ def fill_missing():
 
 def to_json():
     """
-    load preprocessed monthly VOL data into json files in the /json folder
+    Load preprocessed monthly VOL data into json files in the json/ folder.
     """
     for i, m in enumerate(months):
         fold_path = PROC_DIR+m+"_2019/"
@@ -78,7 +80,7 @@ def to_json():
 
 def save_as_dataset():
     """
-    load monthly json files and combine for the whole year
+    Load monthly json files and combine for the whole year.
     """
     for i,s in enumerate(states):
         # Get total stations 
@@ -118,6 +120,9 @@ def save_as_dataset():
 
 
 def generated_dataset():
+    """
+    Generate dataset into input and targets with sliding window.
+    """
     for i,s in enumerate(states):
         example = JSON_DIR+"january_2019/"+s+".json"
         f = open(example)
@@ -156,7 +161,7 @@ def generated_dataset():
 
 def load_fed_dataset(dataset_path, client_id):
     """
-    split preprocessed data in .npy files into features (x) and targets (y)
+    Split preprocessed data in .npy files into features (x) and targets (y).
     """
     STA_PATH = '/hdd/traffic_data_2019/'
     df = pd.read_csv(STA_PATH+"station_cluster.csv", index_col=0)
