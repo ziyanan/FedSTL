@@ -120,6 +120,96 @@ def transformer_train(dataloader, net, args, loss_func, lr):
 
 
 
+class LocalUpdateDitto(object):
+    def __init__(self, args, dataset=None, idxs=None):
+        self.args = args
+        self.loss_func = nn.MSELoss()
+        self.ldr_train = dataset["train_private"]
+        self.ldr_val = dataset["val"]
+        self.ldr_test = dataset["test"]
+        self.idxs = idxs  # client index
+
+    def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001, w_ditto=None, lam=1):
+        net.train()
+        # get weights/bias parameter names
+        bias_p, weight_p = [], []
+        for name, p in net.named_parameters():
+            if 'bias' in name:
+                bias_p += [p]
+            else:
+                weight_p += [p]
+        
+        optimizer = torch.optim.SGD([
+            {'params': weight_p, 'weight_decay':0.0001}, 
+            {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
+        
+        local_eps = self.args.client_iter  # local update epochs
+        epoch_loss = []
+        hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
+
+        for name, param in net.named_parameters():
+            param.requires_grad = True
+        
+        for iter in range(local_eps):   # for # total local ep
+            num_updates = 0
+            batch_loss = []
+
+            for batch_idx, (X, y) in enumerate(self.ldr_train):
+                w_0 = copy.deepcopy(net.state_dict())
+                optimizer.zero_grad()
+                hidden_1 = repackage_hidden(hidden_1)
+                hidden_2 = repackage_hidden(hidden_2)
+                output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
+                loss = self.loss_func(output, y)
+                loss.backward()
+                optimizer.step()
+
+                if w_ditto is not None:
+                    w_net = copy.deepcopy(net.state_dict())
+                    for key in w_net.keys():
+                        w_net[key] = w_net[key] - lr*lam*(w_0[key] - w_ditto[key])
+                    net.load_state_dict(w_net)
+                    optimizer.zero_grad()
+
+                num_updates += 1
+                batch_loss.append(loss.item())
+                if num_updates == self.args.local_updates:
+                    break
+
+            epoch_loss.append(sum(batch_loss)/len(batch_loss))
+            return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
+        
+    def test(self, net, w_glob_keys, dataset_test=None, ind=-1, idx=-1):
+        net.eval()
+        epoch_loss = []
+        num_updates = 0
+        if net.model_type != 'transformer':
+            hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
+
+            for name, param in net.named_parameters():
+                param.requires_grad = False 
+
+            batch_loss = []
+            batch_y_test = []
+            batch_pred_test = []
+            for X, y in self.ldr_train:
+                hidden_1 = repackage_hidden(hidden_1)
+                hidden_2 = repackage_hidden(hidden_2)
+                output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
+                loss = self.loss_func(output, y)
+
+                batch_y_test.append(y.detach().cpu().numpy())
+                batch_pred_test.append(output.detach().cpu().numpy())
+                
+                net.zero_grad()
+                num_updates += 1
+                batch_loss.append(loss.item())
+
+            epoch_loss.append(sum(batch_loss)/len(batch_loss))
+        return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
+
+
+
 
 # local updates for FedRep, FedPer, LG-FedAvg, FedAvg, FedProx
 class LocalUpdate(object):
@@ -141,7 +231,7 @@ class LocalUpdate(object):
             return net.state_dict(), avg_ep_loss, self.idxs
         
         else:
-            # get weights / bias parameter names
+            # get weights/bias parameter names
             bias_p, weight_p = [], []
             for name, p in net.named_parameters():
                 if 'bias' in name:

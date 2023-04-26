@@ -11,7 +11,7 @@ import torch
 from torch.utils.data import DataLoader
 from IoTData import SequenceDataset
 from utils.update import LocalUpdate, LocalUpdateProp, compute_cluster_id, cluster_id_property, cluster_explore
-from utils_training import get_device, to_device, save_model, get_client_dataset, get_shared_dataset
+from utils_training import get_device, to_device, save_model, get_client_dataset, get_shared_dataset, model_init
 import sys
 import os
 import copy
@@ -31,17 +31,6 @@ import matplotlib.pyplot as plt
 # sys.stdout = open("log.txt", "a")
 
 
-weight_keys_mapping = {
-    'lstm': ['lstm_1.weight_ih', 'lstm_1.weight_hh', 'lstm_1.bias_ih', 'lstm_1.bias_hh', 
-             'lstm_2.weight_ih', 'lstm_2.weight_hh', 'lstm_2.bias_ih', 'lstm_2.bias_hh'],
-    'gru': ['gru_1.weight_ih', 'gru_1.weight_hh', 'gru_1.bias_ih', 'gru_1.bias_hh', 
-            'gru_2.weight_ih', 'gru_2.weight_hh', 'gru_2.bias_ih', 'gru_2.bias_hh'],
-    'rnn': ['rnn_1.weight_ih', 'rnn_1.weight_hh', 'rnn_1.bias_ih', 'rnn_1.bias_hh', 
-            'rnn_2.weight_ih', 'rnn_2.weight_hh', 'rnn_2.bias_ih', 'rnn_2.bias_hh'],
-    'transformer': ['embed.weight', 'transformer_encoder.layers']
-}
-
-
 
 def get_dict_keys(cluster_id, idxs_users):
     d = {}
@@ -50,43 +39,6 @@ def get_dict_keys(cluster_id, idxs_users):
             if i in val:
                 d[i] = key
     return d
-
-
-
-def model_init(args):
-    if args.dataset == 'fhwa':
-        if args.model == 'LSTM':
-            glob_model = ShallowRegressionLSTM(input_dim=2, batch_size=args.batch_size, time_steps=96, sequence_len=24, hidden_dim=16)
-            clust_weight_keys = weight_keys_mapping['lstm']
-        elif args.model == 'GRU':
-            glob_model = ShallowRegressionGRU(input_dim=2, batch_size=args.batch_size, time_steps=96, sequence_len=24, hidden_dim=16)
-            clust_weight_keys = weight_keys_mapping['gru']
-        elif args.model == 'RNN':
-            glob_model = ShallowRegressionRNN(input_dim=2, batch_size=args.batch_size, time_steps=96, sequence_len=24, hidden_dim=16)
-            clust_weight_keys = weight_keys_mapping['rnn']
-        elif args.model == 'Transformer':
-            glob_model = TimeSeriesTransformer()
-            clust_weight_keys = weight_keys_mapping['transformer']
-        else:
-            print("Model type:", args.model, "not implemented")
-
-    elif args.dataset == 'sumo':
-        if args.model == 'GRU':
-            glob_model = MultiRegressionGRU(input_dim=6, batch_size=args.batch_size, time_steps=40, sequence_len=10, hidden_dim=16)
-            clust_weight_keys = weight_keys_mapping['gru']
-        elif args.model == 'LSTM':
-            glob_model = MultiRegressionLSTM(input_dim=6, batch_size=args.batch_size, time_steps=40, sequence_len=10, hidden_dim=16)
-            clust_weight_keys = weight_keys_mapping['lstm']
-        elif args.model == 'RNN':
-            glob_model = MultiRegressionRNN(input_dim=6, batch_size=args.batch_size, time_steps=40, sequence_len=10, hidden_dim=16)
-            clust_weight_keys = weight_keys_mapping['rnn']
-        elif args.model == 'Transformer':
-            glob_model = TimeSeriesTransformer()
-            clust_weight_keys = weight_keys_mapping['transformer']
-        else:
-            print("Model type:", args.model, "not implemented")
-
-    return glob_model, clust_weight_keys
 
 
 
@@ -168,8 +120,8 @@ def main():
             if ix_epoch == args.epoch:                          
                 m = args.client
             idxs_users = np.random.choice(range(args.client), m, replace=False)  
-            print(f"Epoch {ix_epoch}\n---------")
-            print("select:", idxs_users)     
+            print(f"Communication round  {ix_epoch}\n---------")
+            print("Selected:", idxs_users)     
 
             if args.mode == "train":
                 cluster_id = compute_cluster_id(cluster_models, client_dataset, args, idxs_users)   # cluster: clients
@@ -322,8 +274,8 @@ def main():
             idxs_users = np.random.choice(range(args.client), m, replace=False)          # select devices for this round
             
             try:
-                print(f"Epoch {ix_epoch}\n---------")
-                print("select:", idxs_users)
+                print(f"Communication round  {ix_epoch}\n---------")
+                print("Selected:", idxs_users)
 
                 # client update iterations
                 for c_ind, c in enumerate(idxs_users):
@@ -393,7 +345,7 @@ def main():
 
 
     ############################
-    # evaluation for sumo
+    # evaluation on SUMO dataset.
     elif args.mode == "eval-sumo":
         print("Testing IFCA")
         model = MultiRegressionRNN(input_dim=6, batch_size=args.batch_size, time_steps=40, sequence_len=10, hidden_dim=16)
