@@ -9,7 +9,7 @@ def args_parser():
     parser = argparse.ArgumentParser()
 
     # main args
-    parser.add_argument('--bench', type=str, default="Ditto", choices=["Ditto", "FedAvg", "FedRep", "IFCA", "FedBN"])
+    parser.add_argument('--bench', type=str, default="Ditto", choices=["Ditto", "FedAvg", "FedRep", "IFCA", "FedProx"])
     parser.add_argument('--model', type=str, default="LSTM", choices=["LSTM", "GRU", "RNN", "Transformer"])
     parser.add_argument('--epoch', type=int, default=30, help="# of training epoch")
     parser.add_argument('--mode', type=str, default="train-logic", choices=['train', 'train-logic', 'eval', 'eval-sumo'])
