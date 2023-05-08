@@ -311,7 +311,7 @@ class LocalUpdate(object):
         self.ldr_train = dataset["train_private"]
         self.ldr_val = dataset["val"]
         self.ldr_test = dataset["test"]
-        self.idxs = idxs  # client index
+        self.idxs = idxs
 
 
     def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001):
@@ -335,8 +335,23 @@ class LocalUpdate(object):
         
             for iter in range(local_eps):   # for # total local ep
                 num_updates = 0
-                for name, param in net.named_parameters():
-                    param.requires_grad = True 
+                
+                # fedrep settings
+                if self.args.method == 'FedRep' and iter < self.args.head_iter:
+                    for name, param in net.named_parameters():
+                        if name in w_glob_keys:
+                            param.requires_grad = False
+                        else:
+                            param.requires_grad = True
+                elif self.args.method == 'FedRep' and iter >= self.args.head_iter:
+                    for name, param in net.named_parameters():
+                        if name in w_glob_keys:
+                            param.requires_grad = True
+                        else:
+                            param.requires_grad = False
+                else:
+                    for name, param in net.named_parameters():
+                        param.requires_grad = True 
 
                 batch_loss = []
                 for X, y in self.ldr_train:
@@ -422,7 +437,7 @@ class LocalUpdate(object):
             hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
 
             for name, param in net.named_parameters():
-                param.requires_grad = False 
+                param.requires_grad = False
 
             batch_loss = []
             batch_y_test = []

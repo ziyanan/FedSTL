@@ -24,7 +24,6 @@ random.seed(0)
 np.random.seed(0)
 torch.manual_seed(0)
 torch.cuda.manual_seed_all(0)
-
 import matplotlib.pyplot as plt
 
 ## save results to txt log file.
@@ -230,7 +229,6 @@ def main():
 
             for c in range(args.client):
                 glob_model.load_state_dict(local_weights[c])
-                glob_model.eval()
                 if args.mode == "train": 
                     local = LocalUpdate(args=args, dataset=client_dataset[c], idxs=c) 
                     w_local, loss, idx = local.test(net=glob_model.to(args.device), idx=c, w_glob_keys=None)  
@@ -325,7 +323,6 @@ def main():
 
             for c in range(args.client):
                 glob_model.load_state_dict(local_weights[c])
-                glob_model.eval()
                 if args.mode == "train": 
                     local = LocalUpdate(args=args, dataset=client_dataset[c], idxs=c) 
                     ## TODO: commented out for now

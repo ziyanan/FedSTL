@@ -9,7 +9,7 @@ def args_parser():
     parser = argparse.ArgumentParser()
 
     # main args
-    parser.add_argument('--bench', type=str, default="Ditto", choices=["Ditto", "FedAvg", "FedRep", "IFCA", "FedProx"])
+    parser.add_argument('--method', type=str, default="FedRep", choices=["Ditto", "FedAvg", "FedRep", "IFCA", "FedProx"])
     parser.add_argument('--model', type=str, default="LSTM", choices=["LSTM", "GRU", "RNN", "Transformer"])
     parser.add_argument('--epoch', type=int, default=30, help="# of training epoch")
     parser.add_argument('--mode', type=str, default="train-logic", choices=['train', 'train-logic', 'eval', 'eval-sumo'])
@@ -24,6 +24,7 @@ def args_parser():
     parser.add_argument('--cluster_fine_tune_iter', type=int, default=10)
     parser.add_argument('--local_updates', type=int, default=15, help="maximum number of local updates")
     parser.add_argument('--client_iter', type=int, default=10, help="# of training iterations for clients")
+    parser.add_argument('--head_iter', type=int, default=8, help="fedrep setting")
     
     # training args
     parser.add_argument('--batch_size', type=float, default=64, help="batch size")

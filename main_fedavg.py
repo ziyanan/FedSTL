@@ -124,7 +124,6 @@ def main():
 
             for c in range(args.client):
                 glob_model.load_state_dict(local_weights[c])
-                glob_model.eval()
                 local = LocalUpdate(args=args, dataset=client_dataset[c], idxs=c) 
                 w_local, loss, idx = local.test(net=glob_model.to(args.device), idx=c, w_glob_keys=None)  
                 local_loss.append(copy.deepcopy(loss))
