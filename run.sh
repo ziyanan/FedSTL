@@ -1,10 +1,13 @@
 #!/bin/sh
 
-python3.9 fed_train.py --model RNN --mode train-logic --epoch 30 --client_iter 15 --local_updates 10
-python3.9 fed_train.py --model RNN --mode train --epoch 30 --client_iter 10 --local_updates 10
+python3.9 main_fedavg.py --model LSTM --method FedAvg --max_lr 0.01
+python3.9 main_fedavg.py --model GRU --method FedAvg --max_lr 0.001
+python3.9 main_fedavg.py --model RNN --method FedAvg --max_lr 0.001
 
-python3.9 fed_train.py --model GRU --mode train-logic --epoch 30 --client_iter 15 --local_updates 10
-python3.9 fed_train.py --model GRU --mode train --epoch 30 --client_iter 10 --local_updates 10
+python3.9 main_fedprox.py --model LSTM --method FedProx --max_lr 0.01
+python3.9 main_fedprox.py --model GRU --method FedProx --max_lr 0.001
+python3.9 main_fedprox.py --model RNN --method FedProx --max_lr 0.001
 
-python3.9 fed_train.py --model LSTM --mode train-logic --epoch 30 --client_iter 15 --local_updates 10
-python3.9 fed_train.py --model LSTM --mode train --epoch 30 --client_iter 10 --local_updates 10
+python3.9 main_ditto.py --model LSTM --method Ditto --max_lr 0.01
+python3.9 main_ditto.py --model GRU --method Ditto --max_lr 0.001
+python3.9 main_ditto.py --model RNN --method Ditto --max_lr 0.001

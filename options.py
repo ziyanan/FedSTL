@@ -28,7 +28,7 @@ def args_parser():
     
     # training args
     parser.add_argument('--batch_size', type=float, default=64, help="batch size")
-    parser.add_argument('--max_lr', type=float, default=0.01, help="learning rate")
+    parser.add_argument('--max_lr', type=float, default=0.001, help="learning rate")
     parser.add_argument('--grad_clip', type=float, default=0.1, help="grad clip")
     parser.add_argument('--weight_decay', type=float, default=1e-4, help="weight decay")
 

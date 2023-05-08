@@ -130,13 +130,8 @@ def main():
             eval_loss.append(sum(local_loss)/len(local_loss))
             print(sum(local_loss)/len(local_loss))
 
-        model_path = "/hdd/traffic_data_2019/run/"
-        if args.mode == "train":
-            save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.model)+"_glob", ix_epoch)
-        elif args.mode == "train-logic":
-            save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.model)+"_"+str(args.property_type)+"_glob", ix_epoch)
-
-
+        model_path = "/hdd/saved_models/"
+        save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.model)+"_FedAvg", ix_epoch)
 
     else:
         print("FedAvg main: Mode should be set to `train`.")

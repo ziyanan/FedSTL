@@ -139,9 +139,13 @@ def main():
         print(sum(local_loss)/len(local_loss))
 
     # saving models.
-    model_path = "/hdd/traffic_data_2019/run/"
-    save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.model)+"_glob", ix_epoch)
+    model_path = "/hdd/saved_models/"
+    save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.model)+"_FedRep", ix_epoch)
 
+    for c in range(args.client):
+        glob_model.load_state_dict(local_weights[c])
+        model_path = "/hdd/saved_models/"
+        save_model(model_path, net_local, str(args.dataset)+"_"+str(args.model)+"_FedRep_"+str(c), ix_epoch)
 
 
 

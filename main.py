@@ -237,22 +237,21 @@ def main():
                     w_local, loss, cons_loss, idx = local.test(net=glob_model.to(args.device), idx=c, w_glob_keys=None)   
                 local_loss.append(copy.deepcopy(loss))
             eval_loss.append(sum(local_loss)/len(local_loss))
-            
             print(sum(local_loss)/len(local_loss))
 
-        model_path = "/hdd/traffic_data_2019/run/"
+        model_path = "/hdd/saved_models/"
         if args.mode == "train":
-            save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_glob_cluster", ix_epoch)
+            save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_IFCA", ix_epoch)
         elif args.mode == "train-logic":
-            save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_glob_cluster_"+str(args.property_type), ix_epoch)
+            save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_FedSTL_"+str(args.property_type), ix_epoch)
 
         for c in range(args.client):
             glob_model.load_state_dict(local_weights[c])
-            model_path = "/hdd/traffic_data_2019/run/"
+            model_path = "/hdd/saved_models/"
             if args.mode == "train-logic":
-                save_model(model_path, net_local, str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_client_"+str(args.property_type)+"_"+str(c), ix_epoch)
+                save_model(model_path, net_local, str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_IFCA_"+str(args.property_type)+"_"+str(c), ix_epoch)
             else:
-                save_model(model_path, net_local, str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_client_"+str(c), ix_epoch)
+                save_model(model_path, net_local, str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_FedSTL_"+str(c), ix_epoch)
 
 
     ############################
@@ -335,7 +334,7 @@ def main():
 
             print(sum(local_loss)/len(local_loss))
 
-        model_path = "/hdd/traffic_data_2019/run/"
+        model_path = "/hdd/saved_models/"
         if args.mode == "train":
             save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.model)+"_glob", ix_epoch)
         elif args.mode == "train-logic":
