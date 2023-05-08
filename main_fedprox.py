@@ -27,13 +27,14 @@ import matplotlib.pyplot as plt
 
 
 ## save results to txt log file.
-# stdoutOrigin=sys.stdout 
-# sys.stdout = open("log.txt", "a")
+stdoutOrigin=sys.stdout 
+
 
 
 def main():
     args = args_parser()
     args.device = get_device()
+    sys.stdout = open("log/FedProx"+str(args.model)+".txt", "a")
 
     ############################
     # Load client dataset.
@@ -79,10 +80,10 @@ def main():
                 m = args.client
             # Select participating clients in this round.
             idxs_users = np.random.choice(range(args.client), m, replace=False)          
-            print(f"Communication round {ix_epoch}\n---------")
-            print("Selected:", idxs_users)
             
             try:
+                print(f"Communication round {ix_epoch}\n---------")
+                print("Selected:", idxs_users)
                 for (c_ind, c) in enumerate(idxs_users):    # client update iterations
                     last = (ix_epoch == args.epoch)
                     local = LocalUpdateProx(args=args, dataset=client_dataset[c], idxs=c)
@@ -145,5 +146,5 @@ if __name__ == '__main__':
     
     finally:
         print('\nDone.')
-        # sys.stdout.close()
-        # sys.stdout=stdoutOrigin
+        sys.stdout.close()
+        sys.stdout=stdoutOrigin

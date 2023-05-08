@@ -11,3 +11,7 @@ python3.9 main_fedprox.py --model RNN --method FedProx --max_lr 0.001
 python3.9 main_ditto.py --model LSTM --method Ditto --max_lr 0.01
 python3.9 main_ditto.py --model GRU --method Ditto --max_lr 0.001
 python3.9 main_ditto.py --model RNN --method Ditto --max_lr 0.001
+
+python3.9 main_fedrep.py --model LSTM --method FedRep --max_lr 0.01
+python3.9 main_fedrep.py --model GRU --method FedRep --max_lr 0.001
+python3.9 main_fedrep.py --model RNN --method FedRep --max_lr 0.001

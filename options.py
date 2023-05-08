@@ -12,7 +12,7 @@ def args_parser():
     parser.add_argument('--method', type=str, default="FedRep", choices=["Ditto", "FedAvg", "FedRep", "IFCA", "FedProx"])
     parser.add_argument('--model', type=str, default="LSTM", choices=["LSTM", "GRU", "RNN", "Transformer"])
     parser.add_argument('--epoch', type=int, default=30, help="# of training epoch")
-    parser.add_argument('--mode', type=str, default="train-logic", choices=['train', 'train-logic', 'eval', 'eval-sumo'])
+    parser.add_argument('--mode', type=str, default="train", choices=['train', 'train-logic', 'eval', 'eval-sumo'])
     parser.add_argument('--dataset', type=str, default="fhwa", choices=['sumo', 'fhwa'])
     parser.add_argument('--client', type=int, default=100)
     parser.add_argument('--cluster', type=int, default=0)

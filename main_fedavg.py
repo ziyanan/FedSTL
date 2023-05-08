@@ -26,12 +26,14 @@ torch.cuda.manual_seed_all(0)
 
 import matplotlib.pyplot as plt
 
-
+# save results to txt log file.
+stdoutOrigin = sys.stdout 
 
 
 def main():
     args = args_parser()
     args.device = get_device()
+    sys.stdout = open("log/FedAvg"+str(args.model)+".txt", "a")
     
     client_dataset = {}
     for c in range(args.client):
@@ -147,5 +149,5 @@ if __name__ == '__main__':
     
     finally:
         print('\nDone.')
-        # sys.stdout.close()
-        # sys.stdout=stdoutOrigin
+        sys.stdout.close()
+        sys.stdout = stdoutOrigin

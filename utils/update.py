@@ -129,7 +129,7 @@ class LocalUpdateProx(object):
         self.idxs = idxs  # client index
 
     def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001, mu=0.1, server_model=None):
-        net.train()
+        
         # get weights/bias parameter names
         bias_p, weight_p = [], []
         for name, p in net.named_parameters():
@@ -154,7 +154,7 @@ class LocalUpdateProx(object):
             batch_loss = []
 
             for batch_idx, (X, y) in enumerate(self.ldr_train):
-                w_0 = copy.deepcopy(net.state_dict())
+                net.train()
                 optimizer.zero_grad()
                 hidden_1 = repackage_hidden(hidden_1)
                 hidden_2 = repackage_hidden(hidden_2)
@@ -172,11 +172,13 @@ class LocalUpdateProx(object):
 
                 num_updates += 1
                 batch_loss.append(loss.item())
+
                 if num_updates == self.args.local_updates:
                     break
 
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
-            return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
+        return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
+    
         
     def test(self, net, w_glob_keys, dataset_test=None, ind=-1, idx=-1):
         net.eval()
@@ -245,7 +247,8 @@ class LocalUpdateDitto(object):
 
             for batch_idx, (X, y) in enumerate(self.ldr_train):
                 w_0 = copy.deepcopy(net.state_dict())
-                optimizer.zero_grad()
+                net.train()
+                net.zero_grad()
                 hidden_1 = repackage_hidden(hidden_1)
                 hidden_2 = repackage_hidden(hidden_2)
                 output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
@@ -256,7 +259,7 @@ class LocalUpdateDitto(object):
                 if w_ditto is not None:
                     w_net = copy.deepcopy(net.state_dict())
                     for key in w_net.keys():
-                        w_net[key] = w_net[key] - lr*lam*(w_0[key] - w_ditto[key])
+                        w_net[key] = w_net[key] - lr*lam*(w_0[key]-w_ditto[key])
                     net.load_state_dict(w_net)
                     optimizer.zero_grad()
 
@@ -266,7 +269,7 @@ class LocalUpdateDitto(object):
                     break
 
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
-            return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
+        return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
         
     def test(self, net, w_glob_keys, dataset_test=None, ind=-1, idx=-1):
         net.eval()
