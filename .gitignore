@@ -2,3 +2,4 @@ __pycache__/
 data_example/
 telex/__pycache__/
 utils/__pycache__/
+log/

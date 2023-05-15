@@ -12,13 +12,10 @@ from torch.utils.data import DataLoader
 from IoTData import SequenceDataset
 from utils.update import LocalUpdate, LocalUpdateProp, compute_cluster_id, cluster_id_property, cluster_explore
 from utils_training import get_device, to_device, save_model, get_client_dataset, get_shared_dataset, model_init
-import sys
-import os
 import copy
 from tqdm import tqdm
 from options import args_parser
 from network import ShallowRegressionLSTM, ShallowRegressionGRU, ShallowRegressionRNN, MultiRegressionLSTM, MultiRegressionGRU, MultiRegressionRNN
-from transformer import TimeSeriesTransformer
 import random
 random.seed(0)
 np.random.seed(0)
@@ -47,27 +44,6 @@ def main():
     args = args_parser()
     args.device = get_device()
     
-    ############################
-    # loading client dataset
-    # if args.mode == "train":
-    #     client_dataset = {}
-    #     for c in range(args.client):
-    #         client_dataset[c] = {}
-    #         train_loader, val_loader, test_loader, dataset_len = get_client_dataset(c, args.dataset)
-    #         client_dataset[c]["train"] = train_loader
-    #         client_dataset[c]["val"] = val_loader
-    #         client_dataset[c]["test"] = test_loader
-    #         client_dataset[c]["len"] = dataset_len
-    # elif args.mode == "train-logic" or args.mode == "eval-sumo" or args.mode == "eval":
-    #     client_dataset = {}
-    #     for c in range(args.client):
-    #         client_dataset[c] = {}
-    #         train_loader_private, trainset_shared, val_loader, test_loader, dataset_len = get_shared_dataset(c, args.dataset)
-    #         client_dataset[c]["train_private"] = train_loader_private
-    #         client_dataset[c]["train_shared"] = trainset_shared
-    #         client_dataset[c]["val"] = val_loader
-    #         client_dataset[c]["test"] = test_loader
-    #         client_dataset[c]["len"] = dataset_len
     client_dataset = {}
     for c in range(args.client):
         client_dataset[c] = {}
@@ -98,7 +74,7 @@ def main():
     ############################
     # training with clusters
     if "train" in args.mode and args.cluster > 0:   
-        # init cluster weights and models
+        
         cluster_weights = {}
         for cluster in range(args.cluster):
             cluster_weights[cluster] = {}
@@ -116,37 +92,32 @@ def main():
             total_len = 0               # total dataset length
             cluster_len = [0] * args.cluster
 
-            m = max(int(args.frac * args.client), 1)        # a fraction of all devices
+            # a fraction of all devices
+            m = max(int(args.frac * args.client), 1)        
             if ix_epoch == args.epoch:                          
                 m = args.client
             idxs_users = np.random.choice(range(args.client), m, replace=False)  
             print(f"Communication round  {ix_epoch}\n---------")
             print("Selected:", idxs_users)     
 
-            if args.mode == "train":
-                cluster_id = compute_cluster_id(cluster_models, client_dataset, args, idxs_users)   # cluster: clients
-            elif args.mode == "train-logic":
-                cluster_id = cluster_id_property(cluster_models, client_dataset, args, idxs_users)  # cluster: clients
-            client2cluster = get_dict_keys(cluster_id, idxs_users)                                  # client:  cluster
-            print(client2cluster)
+            last = (ix_epoch == args.epoch)
+            if last: 
+                args.frac = 1
+            cluster_id = cluster_id_property(cluster_models, client_dataset, args, idxs_users)  # cluster: clients
+            client2cluster = get_dict_keys(cluster_id, idxs_users)                              # client:  cluster
             
-            for c_ind, c in enumerate(idxs_users):
-                if args.mode == "train":
-                    local = LocalUpdate(args=args, dataset=client_dataset[c], idxs=c)   # init local update modules
-                elif args.mode == "train-logic":
-                    local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
-                
+            for c in idxs_users:
+                local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
                 net_local = copy.deepcopy(cluster_models[client2cluster[c]]) 
                 w_local = net_local.state_dict()
                 for k in local_weights[c].keys():
                     if k not in clust_weight_keys:
                         w_local[k] = local_weights[c][k]
                 net_local.load_state_dict(w_local)
-                last = (ix_epoch == args.epoch)
-                if args.mode == "train":
-                    w_local, loss, idx = local.train_cluster(net=net_local.to(args.device), idx=c, w_glob_keys=clust_weight_keys, lr=args.max_lr, last=last)
-                elif args.mode == "train-logic":
-                    w_local, loss, idx = local.train_cluster(net=net_local.to(args.device), idx=c, w_glob_keys=clust_weight_keys, lr=args.max_lr, last=last)
+                
+                w_local, loss, idx = local.train(net=net_local.to(args.device), 
+                                                 idx=c, w_glob_keys=clust_weight_keys, 
+                                                 lr=args.max_lr, last=last)
                 local_loss.append(copy.deepcopy(loss))
                 total_len += client_dataset[c]["len"][0]
                 cluster_len[client2cluster[c]] += client_dataset[c]["len"][0]
@@ -170,7 +141,6 @@ def main():
                     for key in glob_model.state_dict().keys():
                         glob_weight[key] += w_local[key]*client_dataset[c]["len"][0]
                         local_weights[c][key] = w_local[key]
-
                 print(ix_epoch, idx, loss)
             
             # get weighted average global weights
@@ -212,46 +182,42 @@ def main():
                     cluster_data_x = np.concatenate(data_x, axis=0)
                     cluster_data_y = np.concatenate(data_y, axis=0)
                     cluster_train_dataset = SequenceDataset(cluster_data_x, cluster_data_y)
-                    cluster_train_loader = DataLoader(cluster_train_dataset, batch_size=64, shuffle=True, drop_last=True)
+                    cluster_train_loader = DataLoader(cluster_train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
 
-                    w_local, loss = cluster_explore(
-                        net=net_local.to(args.device), w_glob_keys=clust_weight_keys, lr=args.max_lr, 
-                        args=args, dataloaders=cluster_train_loader, idxs=cluster)
+                    w_local, loss = cluster_explore(net=net_local.to(args.device), 
+                                                    w_glob_keys=clust_weight_keys, 
+                                                    lr=args.max_lr, args=args, 
+                                                    dataloaders=cluster_train_loader)
                     for key in clust_weight_keys:
                         cluster_weights[cluster][key] = w_local[key]
                     cluster_models[cluster].load_state_dict(w_local)
                     print("cluster fine-tune:", ix_epoch, cluster, loss)
             
         
-            loss_avg = sum(local_loss) / len(local_loss)
+            loss_avg = sum(local_loss)/len(local_loss)
             train_loss.append(loss_avg)
-
 
             for c in range(args.client):
                 glob_model.load_state_dict(local_weights[c])
-                if args.mode == "train": 
-                    local = LocalUpdate(args=args, dataset=client_dataset[c], idxs=c) 
-                    w_local, loss, idx = local.test(net=glob_model.to(args.device), idx=c, w_glob_keys=None)  
-                elif args.mode == "train-logic":           
-                    local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
-                    w_local, loss, cons_loss, idx = local.test(net=glob_model.to(args.device), idx=c, w_glob_keys=None)   
+                local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
+                w_local, loss, cons_loss, idx = local.test(net=glob_model.to(args.device), idx=c, w_glob_keys=None)   
                 local_loss.append(copy.deepcopy(loss))
             eval_loss.append(sum(local_loss)/len(local_loss))
             print(sum(local_loss)/len(local_loss))
 
         model_path = "/hdd/saved_models/"
-        if args.mode == "train":
-            save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_IFCA", ix_epoch)
-        elif args.mode == "train-logic":
-            save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_FedSTL_"+str(args.property_type), ix_epoch)
-
+        glob_model.load_state_dict(glob_weight)
+        save_model(model_path, glob_model, 
+                   str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_FedSTL_"+str(args.property_type), 
+                   ix_epoch)
+        
+        for c in range(args.cluster):
+            glob_model.load_state_dict(cluster_weights[c])
+            save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.model)+"_FedSTL_Cluster_"+str(c), ix_epoch)
+        
         for c in range(args.client):
             glob_model.load_state_dict(local_weights[c])
-            model_path = "/hdd/saved_models/"
-            if args.mode == "train-logic":
-                save_model(model_path, net_local, str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_IFCA_"+str(args.property_type)+"_"+str(c), ix_epoch)
-            else:
-                save_model(model_path, net_local, str(args.dataset)+"_"+str(args.local_updates)+"_"+str(args.model)+"_FedSTL_"+str(c), ix_epoch)
+            save_model(model_path, glob_model, str(args.dataset)+"_"+str(args.model)+"_FedSTL_Client_"+str(c), ix_epoch)
 
 
     ############################

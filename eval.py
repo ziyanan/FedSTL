@@ -28,10 +28,25 @@ import matplotlib.pyplot as plt
 
 
 
+def get_eval_model(net_path, net_type):
+    if net_type == 'GRU':
+        model = ShallowRegressionGRU(input_dim=2, batch_size=5, time_steps=96, sequence_len=24, hidden_dim=16)
+    elif net_type == 'LSTM':
+        model = ShallowRegressionLSTM(input_dim=2, batch_size=5, time_steps=96, sequence_len=24, hidden_dim=16)
+    elif net_type == 'RNN':
+        model = ShallowRegressionRNN(input_dim=2, batch_size=5, time_steps=96, sequence_len=24, hidden_dim=16)
+    model = to_device(model, 'cuda')
+    model.load_state_dict(torch.load(net_path))
+    return model
+
+
+
+
 
 def main():
     args = args_parser()
     args.device = get_device()
+    model_path = "/hdd/saved_models/"
     
     client_dataset = {}
     for c in range(args.client):
@@ -43,22 +58,6 @@ def main():
         client_dataset[c]["test"] = test_loader
         client_dataset[c]["len"] = dataset_len
     print("Loaded client dataset.")
-
-    ############################
-    # loading shared model
-    glob_model, clust_weight_keys = model_init(args)
-    glob_model = to_device(glob_model, args.device)
-    net_keys = [*glob_model.state_dict().keys()]
-
-    ############################
-    # generate list of local models for each user
-    local_weights = {}      # client ID: weight: val
-    for c in range(args.client):
-        w_local_dict = {}
-        for key in glob_model.state_dict().keys():
-            w_local_dict[key] = glob_model.state_dict()[key]
-        local_weights[c] = w_local_dict
-    print("Loaded client models.")
 
     ############################
     # evaluation on SUMO dataset.
@@ -133,56 +132,187 @@ def main():
 
 
     elif args.mode == "eval":
-        print("IFCA client")
-        model = ShallowRegressionLSTM(input_dim=2, batch_size=args.batch_size, time_steps=96, sequence_len=24, hidden_dim=16)
-        local_loss = []     
-        local_rho = []
-        for c in range(args.client):
-            model_path = "/hdd/traffic_data_2019/run-model-backup/run/fhwaLSTM_client_"+str(c)+"_epoch_50.pt"
-            model.load_state_dict(torch.load(model_path))
+        model_types = ["RNN", "GRU", "LSTM"]
+
+        print("==============================================================")
+        for type in model_types:
+            print("Evaluating IFCA on model", type)
+            local_loss = []
+            local_cons_loss = []
+            local_rho = []
+            for c in range(args.client):
+                net_path = os.path.join(model_path, 'fhwa_'+type+'_IFCA_'+str(c)+'_epoch_30.pt')
+                model = get_eval_model(net_path, type)
+                model.eval()
+                local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
+                loss, cons_loss, idx, rho_perc = local.test(net=model.to(args.device), idx=c, w_glob_keys=None, rho=True)
+                local_loss.append(copy.deepcopy(loss))
+                local_cons_loss.append(copy.deepcopy(cons_loss))
+                local_rho.append(copy.deepcopy(rho_perc.item()))
+            
+            print("Local loss:")
+            std = np.std(local_loss)
+            error = 1.96 * std / np.sqrt(len(local_loss))
+            print("Mean:", np.mean(local_loss))
+            print("Error bar:", error)
+            print()
+
+            print("Local cons loss:")
+            std = np.std(local_cons_loss)
+            error = 1.96 * std / np.sqrt(len(local_cons_loss))
+            print("Mean:", np.mean(local_cons_loss))
+            print("Error bar:", error)
+            print()
+
+            print("Local rho:")
+            std = np.std(local_rho)
+            error = 1.96 * std / np.sqrt(len(local_rho))
+            print("Mean:", np.mean(local_rho))
+            print("Error bar:", error)
+            print()
+
+
+
+        print("==============================================================")
+        for type in model_types:
+            print("Evaluating FedRep on model", type)
+            local_loss = []
+            local_cons_loss = []
+            local_rho = []
+            for c in range(args.client):
+                net_path = os.path.join(model_path, 'fhwa_'+type+'_FedRep_'+str(c)+'_epoch_30.pt')
+                model = get_eval_model(net_path, type)
+                model.eval()
+                local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
+                loss, cons_loss, idx, rho_perc = local.test(net=model.to(args.device), idx=c, w_glob_keys=None, rho=True)
+                local_loss.append(copy.deepcopy(loss))
+                local_cons_loss.append(copy.deepcopy(cons_loss))
+                local_rho.append(copy.deepcopy(rho_perc.item()))
+            
+            print("Local loss:")
+            std = np.std(local_loss)
+            error = 1.96 * std / np.sqrt(len(local_loss))
+            print("Mean:", np.mean(local_loss))
+            print("Error bar:", error)
+
+            print("Local cons loss:")
+            std = np.std(local_cons_loss)
+            error = 1.96 * std / np.sqrt(len(local_cons_loss))
+            print("Mean:", np.mean(local_cons_loss))
+            print("Error bar:", error)
+
+            print("Local rho:")
+            std = np.std(local_rho)
+            error = 1.96 * std / np.sqrt(len(local_rho))
+            print("Mean:", np.mean(local_rho))
+            print("Error bar:", error)
+
+
+        print("==============================================================")
+        for type in model_types:
+            print("Evaluating Ditto on model", type)
+            local_loss = []
+            local_cons_loss = []
+            local_rho = []
+            for c in range(args.client):
+                net_path = os.path.join(model_path, 'fhwa_'+type+'_Ditto_'+str(c)+'_epoch_30.pt')
+                model = get_eval_model(net_path, type)
+                model.eval()
+                local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
+                loss, cons_loss, idx, rho_perc = local.test(net=model.to(args.device), idx=c, w_glob_keys=None, rho=True)
+                local_loss.append(copy.deepcopy(loss))
+                local_cons_loss.append(copy.deepcopy(cons_loss))
+                local_rho.append(copy.deepcopy(rho_perc.item()))
+            
+            print("Local loss:")
+            std = np.std(local_loss)
+            error = 1.96 * std / np.sqrt(len(local_loss))
+            print("Mean:", np.mean(local_loss))
+            print("Error bar:", error)
+
+            print("Local cons loss:")
+            std = np.std(local_cons_loss)
+            error = 1.96 * std / np.sqrt(len(local_cons_loss))
+            print("Mean:", np.mean(local_cons_loss))
+            print("Error bar:", error)
+
+            print("Local rho:")
+            std = np.std(local_rho)
+            error = 1.96 * std / np.sqrt(len(local_rho))
+            print("Mean:", np.mean(local_rho))
+            print("Error bar:", error)
+
+
+        print("==============================================================")
+        for type in model_types:
+            print("Evaluating FedProx on model", type)
+            net_path = os.path.join(model_path, 'fhwa_'+type+'_FedProx_epoch_30.pt')
+            model = get_eval_model(net_path, type)
             model.eval()
-            local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)                   
-            w_local, loss, cons_loss, idx, rho_perc = local.test(net=model.to(args.device), idx=c, w_glob_keys=None, rho=True) 
-            local_loss.append(copy.deepcopy(loss))
-            local_rho.append(copy.deepcopy(rho_perc.item()))
-            print(idx, loss, rho_perc)
-        print(sum(local_loss)/len(local_loss))
-        print(sum(local_rho)/len(local_rho))
-        
+            local_loss = []
+            local_cons_loss = []
+            local_rho = []
+            for c in range(args.client):
+                local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
+                loss, cons_loss, idx, rho_perc = local.test(net=model.to(args.device), idx=c, w_glob_keys=None, rho=True)
+                local_loss.append(copy.deepcopy(loss))
+                local_cons_loss.append(copy.deepcopy(cons_loss))
+                local_rho.append(copy.deepcopy(rho_perc.item()))
+                # print(idx, loss, rho_perc.item())
+            
+            print("Local loss:")
+            std = np.std(local_loss)
+            error = 1.96 * std / np.sqrt(len(local_loss))
+            print("Mean:", np.mean(local_loss))
+            print("Error bar:", error)
 
-        print("FedSTL client")
-        model = ShallowRegressionLSTM(input_dim=2, batch_size=args.batch_size, time_steps=96, sequence_len=24, hidden_dim=16)
-        local_loss = []    
-        local_rho = []
-        for c in range(args.client):
-            model_path = "/hdd/traffic_data_2019/run/fhwa_10_LSTM_client_eventually_"+str(c)+"_epoch_50.pt"
-            model.load_state_dict(torch.load(model_path))
+            print("Local cons loss:")
+            std = np.std(local_cons_loss)
+            error = 1.96 * std / np.sqrt(len(local_cons_loss))
+            print("Mean:", np.mean(local_cons_loss))
+            print("Error bar:", error)
+
+            print("Local rho:")
+            std = np.std(local_rho)
+            error = 1.96 * std / np.sqrt(len(local_rho))
+            print("Mean:", np.mean(local_rho))
+            print("Error bar:", error)
+
+        print("==============================================================")
+        for type in model_types:
+            print("Evaluating FedAvg on model", type)
+            net_path = os.path.join(model_path, 'fhwa_'+type+'_FedAvg_epoch_30.pt')
+            model = get_eval_model(net_path, type)
             model.eval()
-            local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)                   # init local update modules
-            w_local, loss, cons_loss, idx, rho_perc = local.test(net=model.to(args.device), idx=c, w_glob_keys=None, rho=True) # test local
-            local_loss.append(copy.deepcopy(loss))
-            local_rho.append(copy.deepcopy(rho_perc.item()))
-            print(idx, loss, rho_perc)
-        print(sum(local_loss)/len(local_loss))
-        print(sum(local_rho)/len(local_rho))
+            local_loss = []
+            local_cons_loss = []
+            local_rho = []
+            for c in range(args.client):
+                local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
+                loss, cons_loss, idx, rho_perc = local.test(net=model.to(args.device), idx=c, w_glob_keys=None, rho=True)
+                local_loss.append(copy.deepcopy(loss))
+                local_cons_loss.append(copy.deepcopy(cons_loss))
+                local_rho.append(copy.deepcopy(rho_perc.item()))
+                # print(idx, loss, rho_perc.item())
+            
+            print("Local loss:")
+            std = np.std(local_loss)
+            error = 1.96 * std / np.sqrt(len(local_loss))
+            print("Mean:", np.mean(local_loss))
+            print("Error bar:", error)
 
+            print("Local cons loss:")
+            std = np.std(local_cons_loss)
+            error = 1.96 * std / np.sqrt(len(local_cons_loss))
+            print("Mean:", np.mean(local_cons_loss))
+            print("Error bar:", error)
 
-        print("FedAvg")
-        model_path = "/hdd/traffic_data_2019/run-model-backup/run/fhwa_RNN_glob_epoch_50.pt"
-        model = ShallowRegressionRNN(input_dim=2, batch_size=args.batch_size, time_steps=96, sequence_len=24, hidden_dim=16)
-        model = to_device(model, args.device)
-        model.load_state_dict(torch.load(model_path))
-        model.eval()
-        local_loss = []
-        local_rho = []
-        for c in range(args.client):
-            local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)                   # init local update modules
-            w_local, loss, cons_loss, idx, rho_perc = local.test(net=model.to(args.device), idx=c, w_glob_keys=None, rho=True) # train local
-            local_loss.append(copy.deepcopy(loss))
-            local_rho.append(copy.deepcopy(rho_perc.item()))
-            print(idx, loss, rho_perc)
-        print(sum(local_loss)/len(local_loss))
-        print(sum(local_rho)/len(local_rho))
+            print("Local rho:")
+            std = np.std(local_rho)
+            error = 1.96 * std / np.sqrt(len(local_rho))
+            print("Mean:", np.mean(local_rho))
+            print("Error bar:", error)
+
 
 
         print("IFCA glob")
@@ -201,6 +331,7 @@ def main():
             print(idx, loss, rho_perc)
         print(sum(local_loss)/len(local_loss))
         print(sum(local_rho)/len(local_rho))
+
 
         print("FedSTL glob")
         model_path = "/hdd/traffic_data_2019/run/fhwa_10_LSTM_glob_cluster_eventually_epoch_50.pt"

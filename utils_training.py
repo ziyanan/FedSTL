@@ -130,14 +130,14 @@ def get_shared_dataset(client_id, dataset_name):
         dataset_array[fold+"_x"] = np.load(x_file, allow_pickle=True)
         dataset_array[fold+"_y"] = np.load(y_file, allow_pickle=True)
     
-    public_len = int(0.2*len(dataset_array["train_x"]))
+    public_len = int(0.5*len(dataset_array["train_x"]))
     train_dataset = SequenceDataset(dataset_array["train_x"][public_len:], dataset_array["train_y"][public_len:])
     val_dataset = SequenceDataset(dataset_array["val_x"], dataset_array["val_y"])
     test_dataset = SequenceDataset(dataset_array["test_x"], dataset_array["test_y"])
 
     dataset_len = [len(train_dataset), len(val_dataset), len(test_dataset)]
     train_loader_private = DataLoader(train_dataset, batch_size=64, shuffle=True, drop_last=True)
-    val_loader = DataLoader(val_dataset, batch_size=64, drop_last=True)
-    test_loader = DataLoader(test_dataset, batch_size=64, drop_last=True)
+    val_loader = DataLoader(val_dataset, batch_size=5, drop_last=True)
+    test_loader = DataLoader(test_dataset, batch_size=5, drop_last=True)
 
     return train_loader_private, [dataset_array["train_x"][:public_len], dataset_array["train_y"][:public_len]], val_loader, test_loader, dataset_len

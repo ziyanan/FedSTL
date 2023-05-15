@@ -32,7 +32,7 @@ def convert_best_trace(stl_lib, trace: torch.Tensor):
             else:
                 raise NameError('In convert_best_trace: unknown atomic logic operator.')
 
-        elif isinstance(stl_form, stl.Future):  ## `eventually` is called `future` in telex
+        elif isinstance(stl_form, stl.Future):
             left_t = int(stl_form.interval.left)
             right_t = int(stl_form.interval.right)
             target[:,left_t:right_t+1] = stl_form.subformula.bound

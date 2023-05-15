@@ -50,14 +50,12 @@ def property_loss(X, y_pred, property_by_station_day, loss_function, y, show):
         day = (day+1)%7
         loss += torch.sum(loss_function(y_pred[ind] - torch.tensor(property_by_station_day[sensor][day][0]).to('cuda')))
         loss += torch.sum(loss_function(torch.tensor(property_by_station_day[sensor][day][1]).to('cuda') - y_pred[ind]))
-    
     if show:
         plt.plot(property_by_station_day[sensor][day][0])
         plt.plot(property_by_station_day[sensor][day][1])
         plt.plot(y[ind].detach().cpu())
         plt.plot(y_pred[ind].detach().cpu())
         plt.show()
-
     return loss
 
 
@@ -117,6 +115,7 @@ def transformer_train(dataloader, net, args, loss_func, lr):
         epoch_loss.append(sum(batch_loss)/len(batch_loss))
     
     return net, sum(epoch_loss)/len(epoch_loss)
+
 
 
 class LocalUpdateProx(object):
@@ -374,21 +373,12 @@ class LocalUpdate(object):
                         break
 
                 epoch_loss.append(sum(batch_loss)/len(batch_loss))
-
-            ## check that gt is within upper and lower property
-            # output_p = output.detach().cpu().numpy()
-            # target_p = y.cpu().numpy()
-            # plt.plot(output_p[0], label='out')
-            # plt.plot(target_p[0], label='gt')
-            # plt.legend()
-            # plt.show()
         
             return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
 
 
 
     def train_cluster(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001):
-        # get weights / bias parameter names
         bias_p, weight_p = [], []
         for name, p in net.named_parameters():
             if 'bias' in name:
@@ -396,7 +386,6 @@ class LocalUpdate(object):
             else:
                 weight_p += [p]
         
-        # use SGD as FedAvg
         optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
         local_eps = self.args.client_iter  # local update epochs
         
@@ -411,7 +400,7 @@ class LocalUpdate(object):
                     param.requires_grad = True 
 
                 batch_loss = []
-                for batch_idx, (X, y) in enumerate(self.ldr_train):
+                for X, y in self.ldr_train:
                     net.train()
                     optimizer.zero_grad()
                     hidden_1 = repackage_hidden(hidden_1)
@@ -460,9 +449,6 @@ class LocalUpdate(object):
                 batch_loss.append(loss.item())
 
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
-
-        # for name, param in net.named_parameters():
-        #     print(name, param.data)
         
         
         return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
@@ -489,7 +475,7 @@ def compute_cluster_id(cluster_models, client_dataset, args, idxs_users):
     i = 0
     while i < len(idxs_users):
         min_index = np.argwhere(cluster_loss == np.min(cluster_loss))
-        if len(cluster_id[min_index[0][0]]) < 2 and min_index[0][1] in client_lst:
+        if len(cluster_id[min_index[0][0]]) < int(args.client*args.frac/args.cluster) and min_index[0][1] in client_lst:
             cluster_id[min_index[0][0]].append(min_index[0][1])
             i += 1
             client_lst.remove(min_index[0][1])
@@ -503,7 +489,6 @@ def compute_cluster_id(cluster_models, client_dataset, args, idxs_users):
 def cluster_id_property(cluster_models, client_dataset, args, idxs_users):
     cluster_loss = np.full((args.cluster, args.client), np.inf)
     
-    # load cluster models 
     for cluster in range(args.cluster):
         for c in idxs_users:
             local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
@@ -518,7 +503,7 @@ def cluster_id_property(cluster_models, client_dataset, args, idxs_users):
     i = 0
     while i < len(idxs_users):
         min_index = np.argwhere(cluster_loss == np.min(cluster_loss))
-        if len(cluster_id[min_index[0][0]]) < 2 and min_index[0][1] in client_lst:
+        if len(cluster_id[min_index[0][0]]) < int(args.client*args.frac/args.cluster) and min_index[0][1] in client_lst:
             cluster_id[min_index[0][0]].append(min_index[0][1])
             i += 1
             client_lst.remove(min_index[0][1])
@@ -528,7 +513,7 @@ def cluster_id_property(cluster_models, client_dataset, args, idxs_users):
 
 
 
-def cluster_explore(net, w_glob_keys, lr, args, dataloaders, idxs):
+def cluster_explore(net, w_glob_keys, lr, args, dataloaders):
     bias_p, weight_p = [], []
     for name, p in net.named_parameters():
         if 'bias' in name:
@@ -538,7 +523,9 @@ def cluster_explore(net, w_glob_keys, lr, args, dataloaders, idxs):
 
     loss_func = nn.MSELoss()
     m = nn.ReLU()
-    optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
+    optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, 
+                                 {'params': bias_p, 'weight_decay':0}], 
+                                 lr=lr, momentum=0.5)
    
     epoch_loss = []
     epoch_cons_loss = []
@@ -556,32 +543,32 @@ def cluster_explore(net, w_glob_keys, lr, args, dataloaders, idxs):
             num_updates = 0
             batch_loss = []
             batch_cons_loss = []
-
             for batch_idx, (X, y) in enumerate(dataloaders):
                 net.train()
                 optimizer.zero_grad()
                 hidden_1 = repackage_hidden(hidden_1)
                 hidden_2 = repackage_hidden(hidden_2)
                 output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
-                
                 pred_loss = loss_func(output, y)
                 
                 if args.property_type == 'corr':
                     property_mined = generate_property(X, property_type = args.property_type)
                     cons_loss = loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
+                
                 elif args.property_type == 'constraint':
-                    property_upper = generate_property_test(X, property_type = "upper")
-                    property_lower = generate_property_test(X, property_type = "lower")
-                    cons_loss = property_loss_simp(output, property_upper, m) + property_loss_simp(property_lower, output, m)
+                    property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
+                    corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
+                    property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
+                    corrected_trace_lower = convert_best_trace(stl_lib_lower, output)
+                    cons_loss = loss_func(output, corrected_trace_upper) + loss_func(output, corrected_trace_lower)
+                
                 elif args.property_type == 'eventually':
                     property_upper = generate_property_test(X, property_type = "eventually-upper")
                     property_lower = generate_property_test(X, property_type = "eventually-lower")
                     cons_loss = property_loss_eventually(output, property_upper, m, "eventually-upper") + property_loss_eventually(output, property_lower, m, "eventually-lower")
+                
                 else:
                     raise NotImplementedError
-
-                while abs(cons_loss) > pred_loss:
-                    cons_loss = cons_loss/10
                 
                 loss = pred_loss + cons_loss
                 loss.backward()
@@ -615,7 +602,6 @@ class LocalUpdateProp(object):
 
 
     def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001):
-        # get weights / bias parameter names
         bias_p, weight_p = [], []
         for name, p in net.named_parameters():
             if 'bias' in name: 
@@ -632,12 +618,12 @@ class LocalUpdateProp(object):
         if net.model_type != 'transformer':
             hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
             
-            for iter in range(local_eps):   # for # total local ep
+            for iter in range(local_eps):
                 num_updates = 0
-
+                
                 for name, param in net.named_parameters():
                     param.requires_grad = True 
-
+                    
                 batch_loss = []
                 batch_cons_loss = []
                 for batch_idx, (X, y) in enumerate(self.ldr_train):
@@ -651,36 +637,21 @@ class LocalUpdateProp(object):
                     if self.args.property_type == 'corr':
                         property_mined = generate_property(X, property_type = self.args.property_type)
                         cons_loss = self.loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
+                    
                     elif self.args.property_type == 'constraint':
                         property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
                         corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
                         property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
                         corrected_trace_lower = convert_best_trace(stl_lib_lower, output)
-                        # cons_loss = property_loss_simp(output, property_upper, self.m) + property_loss_simp(property_lower, output, self.m)
-                        ## check that gt is within upper and lower property
-                        # output_p = output.detach().cpu().numpy()
-                        # target_p = y.detach().cpu().numpy()
-                        # print(corrected_trace_upper[0].cpu().numpy())
-                        # print(corrected_trace_lower[0].cpu().numpy())
-                        # plt.plot(output_p[0], label='out')
-                        # plt.plot(target_p[0], label='gt')
-                        # plt.plot(corrected_trace_upper[0].detach().cpu().numpy(), label='up')
-                        # plt.plot(corrected_trace_lower[0].detach().cpu().numpy(), label='low')
-                        # plt.legend()
-                        # plt.show()
                         cons_loss = self.loss_func(output, corrected_trace_upper) + self.loss_func(output, corrected_trace_lower)
-                    
+
                     elif self.args.property_type == 'eventually':
                         property_upper, stl_lib = generate_property_test(X, property_type = "eventually-upper")
                         property_lower, stl_lib = generate_property_test(X, property_type = "eventually-lower")
                         cons_loss = property_loss_eventually(output, property_upper, self.m, "eventually-upper") + property_loss_eventually(output, property_lower, self.m, "eventually-lower")
+                    
                     else:
                         raise NotImplementedError
-                    
-
-
-                    # while abs(cons_loss) > pred_loss:
-                    #     cons_loss = cons_loss/10
                     
                     loss = pred_loss + cons_loss
                     loss.backward()
@@ -690,8 +661,7 @@ class LocalUpdateProp(object):
                     batch_loss.append(pred_loss.item())
                     batch_cons_loss.append(cons_loss.item())
                     
-                    if num_updates == self.args.local_updates: 
-                        break
+                    if num_updates == self.args.local_updates: break
 
                 epoch_loss.append(sum(batch_loss)/len(batch_loss))
                 epoch_cons_loss.append(sum(batch_cons_loss)/len(batch_cons_loss))
@@ -726,52 +696,43 @@ class LocalUpdateProp(object):
             batch_rho = []
             batch_loss = []
             batch_cons_loss = []
-            for X, y in self.ldr_train: ## TODO: fix val and test
+            for X, y in self.ldr_train:
                 net.eval()
                 hidden_1 = repackage_hidden(hidden_1)
                 hidden_2 = repackage_hidden(hidden_2)
                 output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
                 pred_loss = self.loss_func(output, y)
-
+                batch_loss.append(pred_loss.item())
+                
                 if self.args.property_type == 'corr':
                     property_mined = generate_property(X, property_type = self.args.property_type)
                     cons_loss = self.loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
+                
                 elif self.args.property_type == 'constraint':
-                    property_upper, _ = generate_property_test(X, property_type = "upper")
-                    property_lower, _ = generate_property_test(X, property_type = "lower")
-                    # cons_loss = property_loss_simp(output, property_upper, self.m) + property_loss_simp(property_lower, output, self.m)
-                    # output_p = output.detach().cpu().numpy()
-                    # target_p = y.cpu().numpy()
-                    # print(property_upper.cpu().numpy())
-                    # print(property_lower.cpu().numpy())
-                    # plt.plot(output_p[0])
-                    # plt.plot(target_p[0])
-                    # plt.plot(property_upper[0, :24].cpu().numpy())
-                    # plt.plot(property_upper[0, :24].cpu().numpy())
-                    # plt.show()
-                    cons_loss = self.loss_func(output, property_upper[:,:24]) + self.loss_func(output, property_lower[:,:24])
+                    property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
+                    corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
+                    property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
+                    corrected_trace_lower = convert_best_trace(stl_lib_lower, output)
+                    cons_loss = self.loss_func(output, corrected_trace_upper) + self.loss_func(output, corrected_trace_lower)
+
                 elif self.args.property_type == 'eventually':
                     property_upper, _ = generate_property_test(X, property_type = "eventually-upper")
                     property_lower, _ = generate_property_test(X, property_type = "eventually-lower")
                     cons_loss = property_loss_eventually(output, property_upper, self.m, "eventually-upper") + property_loss_eventually(output, property_lower, self.m, "eventually-lower")
                 else:
                     raise NotImplementedError
-
-                # while abs(cons_loss) > pred_loss:
-                #     cons_loss = cons_loss/10
-
-                batch_loss.append(pred_loss.item())
-                batch_cons_loss.append(cons_loss)
+                batch_cons_loss.append(cons_loss.item())
 
                 if rho==True:
-                    # used version
                     if self.args.property_type == 'corr':
                         diff_out = torch.mean(output[:,:-1,0], dim=0)-torch.mean(output[:,:-1,1], dim=0)
                         diff_mine = property_mined[0,1:]
                         batch_rho.append( 1-torch.count_nonzero(m(diff_mine - diff_out))/len(diff_out) )
+                    
                     elif self.args.property_type == 'constraint':
-                        batch_rho.append( 1-torch.count_nonzero(m(property_lower - output))/len(property_lower)/property_lower.shape[1] )
-                        batch_rho.append( 1-torch.count_nonzero(m(output - property_upper))/len(property_upper)/property_upper.shape[1] )
+                        batch_rho.append( 1-torch.count_nonzero(m(corrected_trace_lower - output))/len(corrected_trace_lower)/corrected_trace_lower.shape[1] )
+                        batch_rho.append( 1-torch.count_nonzero(m(output - corrected_trace_upper))/len(corrected_trace_upper)/corrected_trace_upper.shape[1] )
+                    
                     elif self.args.property_type == 'eventually':
                         iterval = 2
                         diff_yp = output - property_upper
@@ -786,7 +747,6 @@ class LocalUpdateProp(object):
                         raise NotImplementedError
 
                 num_updates += 1
-                # if num_updates >= 25: break
 
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
             epoch_cons_loss.append(sum(batch_cons_loss)/len(batch_cons_loss))
@@ -794,15 +754,12 @@ class LocalUpdateProp(object):
                 epoch_rho.append(sum(batch_rho)/len(batch_rho))
             
         if rho==True:
-            return net.state_dict(), sum(epoch_loss)/len(epoch_loss), sum(epoch_cons_loss)/len(epoch_cons_loss), self.idxs, sum(epoch_rho)/len(epoch_rho)
+            return sum(epoch_loss)/len(epoch_loss), sum(epoch_cons_loss)/len(epoch_cons_loss), self.idxs, sum(epoch_rho)/len(epoch_rho)
         else:
             return net.state_dict(), sum(epoch_loss)/len(epoch_loss), sum(epoch_cons_loss)/len(epoch_cons_loss), self.idxs
 
 
     def train_cluster(self, net, w_glob_keys=['lstm_1.weight_ih', 'lstm_1.weight_hh', 'lstm_1.bias_ih', 'lstm_1.bias_hh'], last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001):
-        """
-        cluster training with fine-tuning with property
-        """
         bias_p, weight_p = [], []
         for name, p in net.named_parameters():
             if 'bias' in name:
