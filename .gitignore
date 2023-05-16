@@ -3,3 +3,4 @@ data_example/
 telex/__pycache__/
 utils/__pycache__/
 log/
+SUMO_log/

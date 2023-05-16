@@ -42,7 +42,7 @@ def get_dict_keys(cluster_id, idxs_users):
 def main():
     args = args_parser()
     args.device = get_device()
-    sys.stdout = open("log/IFCA"+str(args.model)+".txt", "a")
+    sys.stdout = open("SUMO_log/IFCA"+str(args.model)+".txt", "a")
     
     client_dataset = {}
     for c in range(args.client):

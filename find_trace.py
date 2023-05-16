@@ -16,21 +16,30 @@ def best_trace_helper():
     pass
 
 
-def convert_best_trace(stl_lib, trace: torch.Tensor):
+def convert_best_trace(stl_lib, trace: torch.Tensor, multi: bool = False):
     target = torch.zeros_like(trace).to(device)
     corrected_trace = torch.zeros_like(trace).to(device)
     
     for stl_form in stl_lib:
         if isinstance(stl_form, stl.Globally):
-            left_t = int(stl_form.interval.left)
-            right_t = int(stl_form.interval.right)
-            target[:,left_t:right_t+1] = stl_form.subformula.bound
-            if '>' in stl_form.subformula.relop:
-                corrected_trace = torch.where(target < trace, trace, target)
-            elif '<' in stl_form.subformula.relop:
-                corrected_trace = torch.where(target > trace, trace, target)
+            if multi:
+                left_t = int(stl_form.interval.left)
+                right_t = int(stl_form.interval.right)
+                target[:,left_t:right_t+1] = stl_form.subformula.bound
+                if '>' in stl_form.subformula.relop:
+                    corrected_trace = torch.where(target < trace, trace, target)
+                elif '<' in stl_form.subformula.relop:
+                    corrected_trace = torch.where(target > trace, trace, target)
             else:
-                raise NameError('In convert_best_trace: unknown atomic logic operator.')
+                left_t = int(stl_form.interval.left)
+                right_t = int(stl_form.interval.right)
+                target[:,left_t:right_t+1] = stl_form.subformula.bound
+                if '>' in stl_form.subformula.relop:
+                    corrected_trace = torch.where(target < trace, trace, target)
+                elif '<' in stl_form.subformula.relop:
+                    corrected_trace = torch.where(target > trace, trace, target)
+                else:
+                    raise NameError('In convert_best_trace: unknown atomic logic operator.')
 
         elif isinstance(stl_form, stl.Future):
             left_t = int(stl_form.interval.left)
@@ -66,12 +75,6 @@ def convert_best_trace(stl_lib, trace: torch.Tensor):
             left_corrected  = convert_best_trace(stl_form.left, trace)
             right_corrected = convert_best_trace(stl_form.right, left_corrected)
             return right_corrected
-
-        elif isinstance(stl_form, stl.Implies):
-            ...
-
-        elif isinstance(stl_form, stl.Not):
-            ...
 
         else:
             raise RuntimeError('In convert_best_trace: unknown STL operator type.')

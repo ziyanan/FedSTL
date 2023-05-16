@@ -21,6 +21,8 @@ def get_device():
     return torch.device("cpu")
 device = get_device()
 
+
+
 STL_templates = {
     'lower': [
         "G[0,1](x >= a? -500;500 )",
@@ -170,7 +172,6 @@ def get_min_window(arr, window_length=2):
 
 
 def test_stl(tlStr, optmethod = "gradient"):
-    # test spe
     print("Got template:",tlStr) # STL template 
     (stlsyn, value, dur) = synth.synthSTLParam(tlStr, trace_dir, optmethod)
     print("Synthesized STL formula: {}\n Theta Optimal Value: {}\n Optimization time: {}\n".format(stlsyn, value, dur))
@@ -191,9 +192,6 @@ def cut_trace_list(trace_dir):
     for tracename in tracenamelist:
         tracelist.append(inputreader.readtracefile(tracename))
         
-    """
-    TODO: fix the loop
-    """
     for trace in tracelist:
         trace_len = 24
         list_chunked = []
@@ -268,6 +266,15 @@ def generate_property_test(tensor_arr, property_type = "upper", mining_range = 2
             property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
             stlsyn_lib.append(stlsyn)
 
+    elif property_type == "corr":
+        x1_bound = torch.min(tensor_arr[:,:,0], 0).values.cpu().detach().numpy()
+        x2_bound = torch.min(tensor_arr[:,:,1], 0).values.cpu().detach().numpy()
+        for temp_idx, templ in enumerate(STL_templates[property_type]):
+            val_dict = {'x1': x1_bound, 'x2': x2_bound}
+            (stlsyn, value, dur) = synth.synthSTLParam(templ, [val_dict], optmethod)
+            property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
+            stlsyn_lib.append(stlsyn)
+
     elif property_type == "until":
         for temp_idx, templ in enumerate(STL_templates[property_type]):
             conf_interval_dict = {
@@ -292,9 +299,6 @@ def generate_property_test(tensor_arr, property_type = "upper", mining_range = 2
             except:
                 property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = sliding_window[mining_range*temp_idx:mining_range*temp_idx+mining_range, 1]
 
-    else:
-        raise NotImplementedError
-
     return property, stlsyn_lib
 
 
@@ -312,8 +316,6 @@ def generate_property(tensor_arr, property_type = "corr", mining_range = 2):
     for j in range(tensor_arr.shape[1]):
         up_bound = torch.max(tensor_arr, 0)
         low_bound = torch.min(tensor_arr, 0)
-    
-    print(property_type)
 
     if property_type == "upper":
         for temp_idx, templ in enumerate(STL_templates[property_type]):

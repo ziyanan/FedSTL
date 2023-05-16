@@ -33,7 +33,7 @@ stdoutOrigin = sys.stdout
 def main():
     args = args_parser()
     args.device = get_device()
-    sys.stdout = open("log/FedAvg"+str(args.model)+".txt", "a")
+    sys.stdout = open("SUMO_log/FedAvg"+str(args.model)+".txt", "a")
     
     client_dataset = {}
     for c in range(args.client):

@@ -73,7 +73,7 @@ def main():
 
     ############################
     # training with clusters
-    if "train" in args.mode and args.cluster > 0:   
+    if "train" in args.mode and args.cluster > 0:
         
         cluster_weights = {}
         for cluster in range(args.cluster):
@@ -114,7 +114,7 @@ def main():
                     if k not in clust_weight_keys:
                         w_local[k] = local_weights[c][k]
                 net_local.load_state_dict(w_local)
-                
+
                 w_local, loss, idx = local.train(net=net_local.to(args.device), 
                                                  idx=c, w_glob_keys=clust_weight_keys, 
                                                  lr=args.max_lr, last=last)
@@ -188,11 +188,10 @@ def main():
                                                     w_glob_keys=clust_weight_keys, 
                                                     lr=args.max_lr, args=args, 
                                                     dataloaders=cluster_train_loader)
-                    for key in clust_weight_keys:
+                    for key in glob_weight.keys():
                         cluster_weights[cluster][key] = w_local[key]
                     cluster_models[cluster].load_state_dict(w_local)
                     print("cluster fine-tune:", ix_epoch, cluster, loss)
-            
         
             loss_avg = sum(local_loss)/len(local_loss)
             train_loss.append(loss_avg)

@@ -34,7 +34,7 @@ stdoutOrigin=sys.stdout
 def main():
     args = args_parser()
     args.device = get_device()
-    sys.stdout = open("log/FedRep"+str(args.model)+".txt", "a")
+    sys.stdout = open("SUMO_log/FedRep"+str(args.model)+".txt", "a")
 
     ############################
     # Load client dataset.
