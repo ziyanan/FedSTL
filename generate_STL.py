@@ -319,15 +319,21 @@ def generate_property_test(tensor_arr, property_type = "upper", mining_range = 2
 
     if property_type == "upper":
         for temp_idx, templ in enumerate(STL_templates[property_type]):
-            (stlsyn, value, dur) = synth.synthSTLParam(templ, up_bound, optmethod)
-            property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
-            stlsyn_lib.append(stlsyn)
+            try:
+                (stlsyn, value, dur) = synth.synthSTLParam(templ, up_bound, optmethod)
+                property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
+                stlsyn_lib.append(stlsyn)
+            except:
+                stlsyn_lib.append('')
 
     elif property_type == "lower":
         for temp_idx, templ in enumerate(STL_templates[property_type]):
-            (stlsyn, value, dur) = synth.synthSTLParam(templ, low_bound, optmethod)
-            property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
-            stlsyn_lib.append(stlsyn)
+            try:
+                (stlsyn, value, dur) = synth.synthSTLParam(templ, low_bound, optmethod)
+                property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
+                stlsyn_lib.append(stlsyn)
+            except:
+                stlsyn_lib.append('')
 
     elif property_type == "corr":
         x_test_0 = torch.max(tensor_arr[:,:,0], 0).values.cpu().detach().numpy()
@@ -336,12 +342,6 @@ def generate_property_test(tensor_arr, property_type = "upper", mining_range = 2
             # val_dict = {'x1': x1_bound, 'x2': x2_bound}
             (stlsyn, value, dur) = synth.synthSTLParam(templ, x_test_0-x_test_1, optmethod)
             stlsyn_lib.append(stlsyn)
-
-            # try:
-            #     (stlsyn, value, dur) = synth.synthSTLParam(templ, [val_dict], optmethod)
-            #     stlsyn_lib.append(stlsyn)
-            # except:
-            #     stlsyn_lib.append('')
 
     elif property_type == "until":
         for temp_idx, templ in enumerate(STL_templates[property_type]):

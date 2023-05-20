@@ -57,36 +57,57 @@ def property_loss(X, y_pred, property_by_station_day, loss_function, y, show):
 
 
 def repackage_hidden(h):
-    """
-    Wraps hidden states in new Tensors, to detach them from their history.
-    """
+
     if isinstance(h, torch.Tensor):
         return h.detach()
     else:
         return tuple(repackage_hidden(v) for v in h)
+
+
+
+
+def transformer_prox_train(dataloader, net, args, loss_func, lr, server_model=None):
     
+    net.train()
+    mu = 1
 
-
-def transformer_test(dataloader, net, args, loss_func):
-    net.eval()
-
+    bias_p, weight_p = [], []
+    for name, p in net.named_parameters():
+        if 'bias' in name:
+            bias_p += [p]
+        else:
+            weight_p += [p]
+    
+    optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
     local_eps = args.client_iter  # local update epochs
     src_mask = generate_square_subsequent_mask(dim1=24, dim2=120).cuda()
     tgt_mask = generate_square_subsequent_mask(dim1=24, dim2=24).cuda()
 
     epoch_loss = []
-    for iter in range(local_eps):
+    for it in range(local_eps):
         num_updates = 0
+        
         for name, param in net.named_parameters():
             param.requires_grad = True 
         
         batch_loss = []
-        for X, y in dataloader:
-            net.eval()
+        for batch_idx, (X, y) in enumerate(dataloader): ## batch first=True
+            w_0 = copy.deepcopy(net.state_dict())
+            net.train()
+            optimizer.zero_grad()
             X = X.unsqueeze(2)
             output = net(src=X, tgt=X[:,-24:,:], src_mask=src_mask, tgt_mask=tgt_mask)
             loss = loss_func(output.view(-1, 24), y)
-            
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(net.parameters(), 0.5)
+            optimizer.step()
+
+            if it>0:
+                w_diff = torch.tensor(0., device=device)
+                for w, w_t in zip(server_model.parameters(), net.parameters()):
+                    w_diff += torch.pow(torch.norm(w - w_t), 2)
+                loss += mu / 2. * w_diff
+
             num_updates += 1
             batch_loss.append(loss.item())
             
@@ -155,6 +176,145 @@ def transformer_ditto_train(dataloader, net, args, loss_func, lr, w_ditto=None, 
 
 
 
+def transformer_prop_train(dataloader, net, args, loss_func, lr, w_glob_keys=None):
+    bias_p, weight_p = [], []
+    for name, p in net.named_parameters():
+        if 'bias' in name:
+            bias_p += [p]
+        else:
+            weight_p += [p]
+    
+    optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
+    local_eps = args.client_iter
+    src_mask = generate_square_subsequent_mask(dim1=24, dim2=120).cuda()
+    tgt_mask = generate_square_subsequent_mask(dim1=24, dim2=24).cuda()
+
+    epoch_loss = []
+    epoch_cons_loss = []
+    for iter in range(local_eps):
+        num_updates = 0
+        for name, param in net.named_parameters():
+            param.requires_grad = True 
+        
+        batch_loss = []
+        batch_cons_loss = []
+        for X, y in dataloader: ## batch first=True
+            net.train()
+            optimizer.zero_grad()
+            X = X.unsqueeze(2)
+            output = net(src=X, tgt=X[:,-24:,:], src_mask=src_mask, tgt_mask=tgt_mask)
+            pred_loss = loss_func(output.view(-1, 24), y)
+
+            if args.property_type == 'corr':
+                property_mined = generate_property(X, property_type = "corr")
+                cons_loss = loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
+            
+            elif args.property_type == 'constraint':
+                property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
+                corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
+                property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
+                corrected_trace_lower = convert_best_trace(stl_lib_lower, output)
+                cons_loss = loss_func(output, corrected_trace_upper) + loss_func(output, corrected_trace_lower)
+
+            loss = pred_loss + cons_loss
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(net.parameters(), 0.5)
+            optimizer.step()
+            num_updates += 1
+            batch_loss.append(loss.item())
+            batch_cons_loss.append(cons_loss.item())
+            
+            if num_updates == args.local_updates: break
+
+        epoch_loss.append(sum(batch_loss)/len(batch_loss))
+        epoch_cons_loss.append(sum(batch_cons_loss)/len(batch_cons_loss))
+    
+    return net, sum(epoch_loss)/len(epoch_loss)
+
+
+
+
+def transformer_prop_test(dataloader, net, args, loss_func, rho=False):
+    net.eval()
+    m = nn.ReLU()
+    local_eps = args.client_iter  # local update epochs
+    src_mask = generate_square_subsequent_mask(dim1=24, dim2=120).cuda()
+    tgt_mask = generate_square_subsequent_mask(dim1=24, dim2=24).cuda()
+
+    epoch_loss = []
+    epoch_rho = []
+    epoch_cons_loss = []
+    for iter in range(local_eps):
+        
+        for name, param in net.named_parameters():
+            param.requires_grad = False 
+
+        batch_rho = []
+        batch_loss = []
+        batch_cons_loss = []
+        
+        for X, y in dataloader:
+            net.eval()
+            X = X.unsqueeze(2)
+            output = net(src=X, tgt=X[:,-24:,:], src_mask=src_mask, tgt_mask=tgt_mask)
+            pred_loss = loss_func(output.view(-1, 24), y)
+            batch_loss.append(pred_loss.item())
+
+            if args.property_type == 'corr':
+                    property_mined = generate_property(X, property_type = 'corr')
+                    cons_loss = loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
+            elif args.property_type == 'constraint':
+                property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
+                corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
+                property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
+                corrected_trace_lower = convert_best_trace(stl_lib_lower, output)
+                cons_loss = loss_func(output, corrected_trace_upper) + loss_func(output, corrected_trace_lower)
+            elif args.property_type == 'eventually':
+                property_upper, _ = generate_property_test(X, property_type = "eventually-upper")
+                property_lower, _ = generate_property_test(X, property_type = "eventually-lower")
+                cons_loss = property_loss_eventually(output, property_upper, m, "eventually-upper") + property_loss_eventually(output, property_lower, self.m, "eventually-lower")
+            else:
+                raise NotImplementedError
+            
+            
+            batch_cons_loss.append(cons_loss.item())
+
+            if rho==True:
+                if args.property_type == 'corr':
+                    diff_out = torch.mean(output[:,:-1,0], dim=0)-torch.mean(output[:,:-1,1], dim=0)
+                    diff_mine = property_mined[0,1:]
+                    batch_rho.append( 1-torch.count_nonzero(m(diff_mine - diff_out))/len(diff_out) )
+                
+                elif args.property_type == 'constraint':
+                    batch_rho.append( 1-torch.count_nonzero(m(corrected_trace_lower - output))/len(corrected_trace_lower)/corrected_trace_lower.shape[1] )
+                    batch_rho.append( 1-torch.count_nonzero(m(output - corrected_trace_upper))/len(corrected_trace_upper)/corrected_trace_upper.shape[1] )
+                
+                elif args.property_type == 'eventually':
+                    iterval = 2
+                    diff_yp = output - property_upper
+                    unsqueezed_diff = diff_yp.view(diff_yp.shape[0], int(diff_yp.shape[1]//iterval), iterval)
+                    diff_min, ind = torch.min(m(unsqueezed_diff), dim=2)
+                    batch_rho.append( 1-torch.count_nonzero(diff_min) / len(diff_min) / diff_min.shape[1] )
+                    diff_yp = property_lower - output
+                    unsqueezed_diff = diff_yp.view(diff_yp.shape[0], int(diff_yp.shape[1]//iterval), iterval)
+                    diff_min, ind = torch.min(m(unsqueezed_diff), dim=2)
+                    batch_rho.append( 1-torch.count_nonzero(diff_min) / len(diff_min) / diff_min.shape[1] )
+                else:
+                    raise NotImplementedError
+
+        epoch_loss.append(sum(batch_loss)/len(batch_loss))
+        epoch_cons_loss.append(sum(batch_cons_loss)/len(batch_cons_loss))
+        if rho==True:
+            epoch_rho.append(sum(batch_rho)/len(batch_rho))
+    
+    if rho==True:
+        return net, sum(epoch_loss)/len(epoch_loss), sum(epoch_cons_loss)/len(epoch_cons_loss), sum(epoch_rho)/len(epoch_rho)
+    else:
+        return net, sum(epoch_loss)/len(epoch_loss), sum(epoch_cons_loss)/len(epoch_cons_loss)
+
+
+
+
 def transformer_train(dataloader, net, args, loss_func, lr, w_glob_keys=None):
     bias_p, weight_p = [], []
     for name, p in net.named_parameters():
@@ -164,7 +324,7 @@ def transformer_train(dataloader, net, args, loss_func, lr, w_glob_keys=None):
             weight_p += [p]
     
     optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
-    local_eps = args.client_iter  # local update epochs
+    local_eps = args.client_iter
     src_mask = generate_square_subsequent_mask(dim1=24, dim2=120).cuda()
     tgt_mask = generate_square_subsequent_mask(dim1=24, dim2=24).cuda()
 
@@ -209,6 +369,40 @@ def transformer_train(dataloader, net, args, loss_func, lr, w_glob_keys=None):
 
 
 
+
+def transformer_test(dataloader, net, args, loss_func):
+    net.eval()
+
+    local_eps = args.client_iter  # local update epochs
+    src_mask = generate_square_subsequent_mask(dim1=24, dim2=120).cuda()
+    tgt_mask = generate_square_subsequent_mask(dim1=24, dim2=24).cuda()
+
+    epoch_loss = []
+    for iter in range(local_eps):
+        num_updates = 0
+        
+        for name, param in net.named_parameters():
+            param.requires_grad = False 
+        
+        batch_loss = []
+        for X, y in dataloader:
+            net.eval()
+            X = X.unsqueeze(2)
+            output = net(src=X, tgt=X[:,-24:,:], src_mask=src_mask, tgt_mask=tgt_mask)
+            loss = loss_func(output.view(-1, 24), y)
+            
+            num_updates += 1
+            batch_loss.append(loss.item())
+            
+            if num_updates == args.local_updates:
+                break
+
+        epoch_loss.append(sum(batch_loss)/len(batch_loss))
+    
+    return net, sum(epoch_loss)/len(epoch_loss)
+
+
+
 class LocalUpdateProx(object):
     def __init__(self, args, dataset=None, idxs=None):
         self.args = args
@@ -221,7 +415,7 @@ class LocalUpdateProx(object):
     def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001, mu=0.1, server_model=None):
         
         if net.model_type == 'transformer':
-            net, avg_ep_loss = transformer_train(self.ldr_train, net, self.args, self.loss_func, self.args.max_lr, w_glob_keys=w_glob_keys)
+            net, avg_ep_loss = transformer_prox_train(self.ldr_train, net, self.args, self.loss_func, self.args.max_lr, server_model)
             return net.state_dict(), avg_ep_loss, self.idxs
         
         else:
@@ -282,28 +476,27 @@ class LocalUpdateProx(object):
             net.eval()
             epoch_loss = []
             num_updates = 0
-            if net.model_type != 'transformer':
-                hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
+            
+            hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
 
-                for name, param in net.named_parameters():
-                    param.requires_grad = False 
+            for name, param in net.named_parameters():
+                param.requires_grad = False 
 
-                batch_loss = []
-                batch_y_test = []
-                batch_pred_test = []
-                for X, y in self.ldr_train:
-                    hidden_1 = repackage_hidden(hidden_1)
-                    hidden_2 = repackage_hidden(hidden_2)
-                    output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
-                    loss = self.loss_func(output, y)
+            batch_loss = []
+            batch_y_test = []
+            batch_pred_test = []
+            for X, y in self.ldr_train:
+                hidden_1 = repackage_hidden(hidden_1)
+                hidden_2 = repackage_hidden(hidden_2)
+                output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
+                loss = self.loss_func(output, y)
 
-                    batch_y_test.append(y.detach().cpu().numpy())
-                    batch_pred_test.append(output.detach().cpu().numpy())
-                    
-                    net.zero_grad()
-                    num_updates += 1
-                    batch_loss.append(loss.item())
-
+                batch_y_test.append(y.detach().cpu().numpy())
+                batch_pred_test.append(output.detach().cpu().numpy())
+                
+                net.zero_grad()
+                num_updates += 1
+                batch_loss.append(loss.item())
                 epoch_loss.append(sum(batch_loss)/len(batch_loss))
             return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
 
@@ -386,28 +579,26 @@ class LocalUpdateDitto(object):
             net.eval()
             epoch_loss = []
             num_updates = 0
+            hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
 
-            if net.model_type != 'transformer':
-                hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
+            for name, param in net.named_parameters():
+                param.requires_grad = False 
 
-                for name, param in net.named_parameters():
-                    param.requires_grad = False 
+            batch_loss = []
+            batch_y_test = []
+            batch_pred_test = []
+            for X, y in self.ldr_train:
+                hidden_1 = repackage_hidden(hidden_1)
+                hidden_2 = repackage_hidden(hidden_2)
+                output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
+                loss = self.loss_func(output, y)
 
-                batch_loss = []
-                batch_y_test = []
-                batch_pred_test = []
-                for X, y in self.ldr_train:
-                    hidden_1 = repackage_hidden(hidden_1)
-                    hidden_2 = repackage_hidden(hidden_2)
-                    output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
-                    loss = self.loss_func(output, y)
-
-                    batch_y_test.append(y.detach().cpu().numpy())
-                    batch_pred_test.append(output.detach().cpu().numpy())
-                    
-                    net.zero_grad()
-                    num_updates += 1
-                    batch_loss.append(loss.item())
+                batch_y_test.append(y.detach().cpu().numpy())
+                batch_pred_test.append(output.detach().cpu().numpy())
+                
+                net.zero_grad()
+                num_updates += 1
+                batch_loss.append(loss.item())
 
                 epoch_loss.append(sum(batch_loss)/len(batch_loss))
             return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
@@ -451,7 +642,6 @@ class LocalUpdate(object):
             for iter in range(local_eps):   # for # total local ep
                 num_updates = 0
                 
-                # fedrep settings
                 if self.args.method == 'FedRep' and iter < self.args.head_iter:
                     for name, param in net.named_parameters():
                         if name in w_glob_keys:
@@ -492,18 +682,21 @@ class LocalUpdate(object):
 
 
     def train_cluster(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001):
-        bias_p, weight_p = [], []
-        for name, p in net.named_parameters():
-            if 'bias' in name:
-                bias_p += [p]
-            else:
-                weight_p += [p]
+        if net.model_type == 'transformer':
+            net, avg_ep_loss = transformer_train(self.ldr_train, net, self.args, self.loss_func, self.args.max_lr, w_glob_keys=w_glob_keys)
+            return net.state_dict(), avg_ep_loss, self.idxs
         
-        optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
-        local_eps = self.args.client_iter  # local update epochs
-        
-        epoch_loss = []
-        if net.model_type != 'transformer':
+        else:
+            bias_p, weight_p = [], []
+            for name, p in net.named_parameters():
+                if 'bias' in name:
+                    bias_p += [p]
+                else:
+                    weight_p += [p]
+            
+            optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
+            local_eps = self.args.client_iter  # local update epochs
+            epoch_loss = []
             hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
             
             for iter in range(local_eps):   # for # total local ep
@@ -660,25 +853,28 @@ def cluster_id_property(cluster_models, client_dataset, args, idxs_users):
 
 
 def cluster_explore(net, w_glob_keys, lr, args, dataloaders):
-    bias_p, weight_p = [], []
-    for name, p in net.named_parameters():
-        if 'bias' in name:
-            bias_p += [p]
-        else:
-            weight_p += [p]
 
     loss_func = nn.MSELoss()
-    m = nn.ReLU()
-    optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, 
-                                 {'params': bias_p, 'weight_decay':0}], 
-                                 lr=lr, momentum=0.5)
-   
-    epoch_loss = []
-    epoch_cons_loss = []
 
+    if net.model_type == 'transformer':
+        net, avg_ep_loss = transformer_prop_train(dataloaders, net, args, loss_func, lr, w_glob_keys=w_glob_keys)
+        return net.state_dict(), avg_ep_loss
+    
     if net.model_type != 'transformer':
-        hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
+        bias_p, weight_p = [], []
+        for name, p in net.named_parameters():
+            if 'bias' in name:
+                bias_p += [p]
+            else:
+                weight_p += [p]
 
+        m = nn.ReLU()
+        optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, 
+                                    {'params': bias_p, 'weight_decay':0}], 
+                                    lr=lr, momentum=0.5)
+        epoch_loss = []
+        epoch_cons_loss = []
+        hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
         for name, param in net.named_parameters():
             if name in w_glob_keys:
                 param.requires_grad = True
@@ -744,28 +940,28 @@ class LocalUpdateProp(object):
         self.ldr_train = dataset["train_private"]
         self.ldr_val = dataset["val"]
         self.ldr_test = dataset["test"]
-        self.idxs = idxs  # client index
+        self.idxs = idxs
 
 
     def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001):
         if net.model_type == 'transformer':
-            net, avg_ep_loss = transformer_train(self.ldr_train, net, self.args, self.loss_func, lr, w_glob_keys=w_glob_keys)
+            net, avg_ep_loss = transformer_prop_train(self.ldr_train, net, self.args, self.loss_func, lr, w_glob_keys=w_glob_keys)
             return net.state_dict(), avg_ep_loss, self.idxs
-            
-        bias_p, weight_p = [], []
-        for name, p in net.named_parameters():
-            if 'bias' in name: 
-                bias_p += [p]
-            else: 
-                weight_p += [p]
-       
-        optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
-        local_eps = self.args.client_iter   # local update epochs
         
-        epoch_loss = []
-        epoch_cons_loss = []
+        else:
+            bias_p, weight_p = [], []
+            for name, p in net.named_parameters():
+                if 'bias' in name: 
+                    bias_p += [p]
+                else: 
+                    weight_p += [p]
+        
+            optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
+            local_eps = self.args.client_iter   # local update epochs
+            
+            epoch_loss = []
+            epoch_cons_loss = []
 
-        if net.model_type != 'transformer':
             hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
             
             for iter in range(local_eps):
@@ -827,7 +1023,16 @@ class LocalUpdateProp(object):
         epoch_cons_loss = []
         num_updates = 0
 
-        if net.model_type != 'transformer':
+        if net.model_type == 'transformer':
+            if rho == True:
+                net, ep_ls, ep_cons_ls, ep_rho= transformer_prop_test(self.ldr_train, net, self.args, self.loss_func, rho=True)
+                # net, ep_ls, ep_cons_ls, ep_rho= transformer_prop_test(self.ldr_val, net, self.args, self.loss_func, rho=True)
+                return net.state_dict(), ep_ls, ep_cons_ls, self.idxs, ep_rho
+            else:
+                net, ep_ls, ep_cons_ls = transformer_prop_test(self.ldr_train, net, self.args, self.loss_func, rho=False)
+                return net.state_dict(), ep_ls, ep_cons_ls, self.idxs
+
+        else:
             hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
 
             for name, param in net.named_parameters():
@@ -979,95 +1184,3 @@ class LocalUpdateProp(object):
             return sum(epoch_loss)/len(epoch_loss), sum(epoch_cons_loss)/len(epoch_cons_loss), self.idxs, sum(epoch_rho)/len(epoch_rho)
         else:
             return net.state_dict(), sum(epoch_loss)/len(epoch_loss), sum(epoch_cons_loss)/len(epoch_cons_loss), self.idxs
-
-
-
-    def train_cluster(self, net, w_glob_keys=['lstm_1.weight_ih', 'lstm_1.weight_hh', 'lstm_1.bias_ih', 'lstm_1.bias_hh'], last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001):
-        bias_p, weight_p = [], []
-        for name, p in net.named_parameters():
-            if 'bias' in name:
-                bias_p += [p]
-            else:
-                weight_p += [p]
-
-        m = nn.ReLU()
-        optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
-        local_eps = self.args.client_iter               # 15
-        head_eps = local_eps-self.args.fine_tune_iter   # 15-5 = 10
-        
-        epoch_loss = []
-        epoch_cons_loss = []
-        if net.model_type != 'transformer':
-            hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
-            
-            for iter in range(local_eps):   # for # total local ep
-                done = False
-                num_updates = 0
-
-                if last:
-                    for name, param in net.named_parameters():
-                        param.requires_grad = True
-
-                elif iter < head_eps:
-                    for name, param in net.named_parameters():
-                        if name in w_glob_keys:
-                            param.requires_grad = True
-                        else:
-                            param.requires_grad = True
-
-                elif iter >= head_eps:
-                    for name, param in net.named_parameters():
-                        if name in w_glob_keys:
-                            param.requires_grad = False
-                        else:
-                            param.requires_grad = True
-
-                batch_loss = []
-                batch_cons_loss = []
-                for batch_idx, (X, y) in enumerate(self.ldr_train):
-                    net.train()
-                    optimizer.zero_grad()
-                    hidden_1 = repackage_hidden(hidden_1)
-                    hidden_2 = repackage_hidden(hidden_2)
-                    output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
-                    
-                    pred_loss = self.loss_func(output, y)
-                    
-                    if iter >= head_eps:    # calc property loss for heads 
-                        if self.args.property_type == 'corr':
-                            property_mined = generate_property(X, property_type = self.args.property_type)
-                            cons_loss = self.loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
-                        elif self.args.property_type == 'constraint':
-                            property_upper = generate_property_test(X, property_type = "upper")
-                            property_lower = generate_property_test(X, property_type = "lower")
-                            cons_loss = property_loss_simp(output, property_upper, self.m) + property_loss_simp(property_lower, output, self.m)
-                        elif self.args.property_type == 'eventually':
-                            property_upper = generate_property_test(X, property_type = "eventually-upper")
-                            property_lower = generate_property_test(X, property_type = "eventually-lower")
-                            cons_loss = property_loss_eventually(output, property_upper, self.m, "eventually-upper") + property_loss_eventually(output, property_lower, self.m, "eventually-lower")
-                        else:
-                            raise NotImplementedError
-                        
-                        while abs(cons_loss) > pred_loss:
-                            cons_loss = cons_loss/10
-                        loss = pred_loss + cons_loss
-                    else:
-                        loss = pred_loss
-
-                    loss.backward()
-                    optimizer.step()
-
-                    num_updates += 1
-                    batch_loss.append(pred_loss.item())
-                    if iter >= head_eps:
-                        batch_cons_loss.append(cons_loss)
-                    
-                    if num_updates == self.args.local_updates:
-                        done = True
-                        break
-
-                epoch_loss.append(sum(batch_loss)/len(batch_loss))
-                if iter >= head_eps:
-                    epoch_cons_loss.append(sum(batch_cons_loss)/len(batch_cons_loss))
-                
-        return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs

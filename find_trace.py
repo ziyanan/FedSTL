@@ -27,8 +27,6 @@ def convert_best_trace(stl_lib, trace: torch.Tensor, multi: bool = False):
                 right_t = int(stl_form.interval.right)
                 right_bound = stl_form.subformula.bound
                 right_relop = stl_form.subformula.relop
-                # g_left_time = int(stl_form.subformula.right.interval.left)
-                # g_right_time = int(stl_form.subformula.right.interval.right)
                 target[:,left_t:right_t+1,1] = right_bound+target[:,left_t:right_t+1,0]
                 if '>' in right_relop:
                     corrected_trace = torch.where(target < trace, trace, target)
@@ -80,12 +78,7 @@ def convert_best_trace(stl_lib, trace: torch.Tensor, multi: bool = False):
             right_corrected = convert_best_trace(stl_form.right, left_corrected)
             return right_corrected
 
-        else:
-            raise RuntimeError('In convert_best_trace: unknown STL operator type.')
+        # else:
+        #     raise RuntimeError('In convert_best_trace: unknown STL operator type.')
         
     return corrected_trace
-
-    # plt.plot(trace[0].detach().cpu().numpy())
-    # plt.plot(target[0].detach().cpu().numpy())
-    # plt.plot(corrected_trace[0].detach().cpu().numpy())
-    # plt.show()

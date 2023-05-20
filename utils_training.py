@@ -21,7 +21,9 @@ weight_keys_mapping = {
             'gru_2.weight_ih', 'gru_2.weight_hh', 'gru_2.bias_ih', 'gru_2.bias_hh'],
     'rnn': ['rnn_1.weight_ih', 'rnn_1.weight_hh', 'rnn_1.bias_ih', 'rnn_1.bias_hh', 
             'rnn_2.weight_ih', 'rnn_2.weight_hh', 'rnn_2.bias_ih', 'rnn_2.bias_hh'],
-    'transformer': ['embed.weight', 'transformer_encoder.layers']
+    'transformer': ['encoder_input_layer.weight', 'encoder_input_layer.bias',
+                    'decoder_input_layer.weight', 'decoder_input_layer.bias',
+                    'linear_mapping.weight', 'linear_mapping.bias']
 }
 
 
