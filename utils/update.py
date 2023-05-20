@@ -128,7 +128,6 @@ class LocalUpdateProx(object):
         self.idxs = idxs  # client index
 
     def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001, mu=0.1, server_model=None):
-        
         # get weights/bias parameter names
         bias_p, weight_p = [], []
         for name, p in net.named_parameters():
@@ -178,7 +177,7 @@ class LocalUpdateProx(object):
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
         return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
     
-        
+    
     def test(self, net, w_glob_keys, dataset_test=None, ind=-1, idx=-1):
         net.eval()
         epoch_loss = []
@@ -434,7 +433,7 @@ class LocalUpdate(object):
             batch_loss = []
             batch_y_test = []
             batch_pred_test = []
-            for X, y in self.ldr_train:
+            for X, y in self.ldr_val:
                 net.eval()
                 hidden_1 = repackage_hidden(hidden_1)
                 hidden_2 = repackage_hidden(hidden_2)
@@ -490,6 +489,7 @@ def compute_cluster_id_eval(cluster_models, client_dataset, args, idxs_users):
     
     # load cluster models 
     for cluster in range(args.cluster):
+        print(cluster)
         for c in idxs_users:
             local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
             w_local, loss, cons_loss, idx = local.test(net=cluster_models[cluster] .to(args.device), idx=c, w_glob_keys=None)
@@ -663,9 +663,8 @@ class LocalUpdateProp(object):
                     pred_loss = self.loss_func(output, y)
                     
                     if self.args.property_type == 'corr':
-                        property_mined, stl_lib = generate_property_test(X, property_type = self.args.property_type)
-                        corrected_trace = convert_best_trace(stl_lib, output, multi=True)
-                        cons_loss = self.loss_func(output, corrected_trace)
+                        property_mined = generate_property(X, property_type = "corr")
+                        cons_loss = self.loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
                     
                     elif self.args.property_type == 'constraint':
                         property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
@@ -694,16 +693,6 @@ class LocalUpdateProp(object):
 
                 epoch_loss.append(sum(batch_loss)/len(batch_loss))
                 epoch_cons_loss.append(sum(batch_cons_loss)/len(batch_cons_loss))
-            
-            ## check that gt is within upper and lower property
-            # output_p = output.detach().cpu().numpy()
-            # target_p = y.cpu().numpy()
-            # plt.plot(output_p[0], label='out')
-            # plt.plot(target_p[0], label='gt')
-            # plt.plot(property_upper[0,:24].cpu().numpy(), label='up')
-            # plt.plot(property_lower[0,:24].cpu().numpy(), label='low')
-            # plt.legend()
-            # plt.show()
         
         return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
 
@@ -726,8 +715,8 @@ class LocalUpdateProp(object):
             batch_loss = []
             batch_cons_loss = []
             
-            # for X, y in self.ldr_val:
-            for X, y in self.ldr_train:
+            for X, y in self.ldr_val:
+            # for X, y in self.ldr_train:
                 net.eval()
                 hidden_1 = repackage_hidden(hidden_1)
                 hidden_2 = repackage_hidden(hidden_2)
@@ -736,9 +725,8 @@ class LocalUpdateProp(object):
                 batch_loss.append(pred_loss.item())
                 
                 if self.args.property_type == 'corr':
-                    property_mined, stl_lib = generate_property_test(X, property_type = self.args.property_type)
-                    corrected_trace = convert_best_trace(stl_lib, output, multi=True)
-                    cons_loss = self.loss_func(output, corrected_trace)
+                    property_mined = generate_property(X, property_type = 'corr')
+                    cons_loss = self.loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
                 
                 elif self.args.property_type == 'constraint':
                     property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")

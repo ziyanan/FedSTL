@@ -25,10 +25,14 @@ def convert_best_trace(stl_lib, trace: torch.Tensor, multi: bool = False):
             if multi:
                 left_t = int(stl_form.interval.left)
                 right_t = int(stl_form.interval.right)
-                target[:,left_t:right_t+1] = stl_form.subformula.bound
-                if '>' in stl_form.subformula.relop:
+                right_bound = stl_form.subformula.bound
+                right_relop = stl_form.subformula.relop
+                # g_left_time = int(stl_form.subformula.right.interval.left)
+                # g_right_time = int(stl_form.subformula.right.interval.right)
+                target[:,left_t:right_t+1,1] = right_bound+target[:,left_t:right_t+1,0]
+                if '>' in right_relop:
                     corrected_trace = torch.where(target < trace, trace, target)
-                elif '<' in stl_form.subformula.relop:
+                elif '<' in right_relop:
                     corrected_trace = torch.where(target > trace, trace, target)
             else:
                 left_t = int(stl_form.interval.left)

@@ -124,6 +124,69 @@ STL_templates = {
         "G[36,37]({ x1 - x2 } >= a? -5;5 )",
         "G[38,39]({ x1 - x2 } >= a? -5;5 )",
     ], 
+    'corr-1': [
+        "G[0,1](x >= a? -5;5 )",
+        "G[2,3](x >= a? -5;5 )",
+        "G[4,5](x >= a? -5;5 )",
+        "G[6,7](x >= a? -5;5 )",
+        "G[8,9](x >= a? -5;5 )",
+        "G[10,11](x >= a? -5;5 )",
+        "G[12,13](x >= a? -5;5 )",
+        "G[14,15](x >= a? -5;5 )",
+        "G[16,17](x >= a? -5;5 )",
+        "G[18,19](x >= a? -5;5 )",
+        "G[20,21](x >= a? -5;5 )",
+        "G[22,23](x >= a? -5;5 )",
+        "G[24,25](x >= a? -5;5 )",
+        "G[26,27](x >= a? -5;5 )",
+        "G[28,29](x >= a? -5;5 )",
+        "G[30,31](x >= a? -5;5 )",
+        "G[32,33](x >= a? -5;5 )",
+        "G[34,35](x >= a? -5;5 )",
+        "G[36,37](x >= a? -5;5 )",
+        "G[38,39](x >= a? -5;5 )",
+    ], 
+    'corr-test': [
+        "G[0,1](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[2,3](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[4,5](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[6,7](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[8,9](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[10,11](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[12,13](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[14,15](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[16,17](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[18,19](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[20,21](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[22,23](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[24,25](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[26,27](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[28,29](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[30,31](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+        "G[32,33](x1 <= 100 -> G[0,5](x2 >= a? -50;50))",
+    ], 
+    'corr-test1': [
+        "G[0,1](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[2,3](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[4,5](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[6,7](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[8,9](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[10,11](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[12,13](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[14,15](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[16,17](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[18,19](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[20,21](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[22,23](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[24,25](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[26,27](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[28,29](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[30,31](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[32,33](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[34,35](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[36,37](x1 <= 100 -> x2 >= a? -50;50)",
+        "G[38,39](x1 <= 100 -> x2 >= a? -50;50)",
+    ], 
     'corr-upper': [
         "G[0,2]({ x1 - x2 } <= a? -5;5 )",
         "G[3,5]({ x1 - x2 } <= a? -5;5 )",
@@ -267,13 +330,18 @@ def generate_property_test(tensor_arr, property_type = "upper", mining_range = 2
             stlsyn_lib.append(stlsyn)
 
     elif property_type == "corr":
-        x1_bound = torch.min(tensor_arr[:,:,0], 0).values.cpu().detach().numpy()
-        x2_bound = torch.min(tensor_arr[:,:,1], 0).values.cpu().detach().numpy()
+        x_test_0 = torch.max(tensor_arr[:,:,0], 0).values.cpu().detach().numpy()
+        x_test_1 = torch.max(tensor_arr[:,:,1], 0).values.cpu().detach().numpy()
         for temp_idx, templ in enumerate(STL_templates[property_type]):
-            val_dict = {'x1': x1_bound, 'x2': x2_bound}
-            (stlsyn, value, dur) = synth.synthSTLParam(templ, [val_dict], optmethod)
-            property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
+            # val_dict = {'x1': x1_bound, 'x2': x2_bound}
+            (stlsyn, value, dur) = synth.synthSTLParam(templ, x_test_0-x_test_1, optmethod)
             stlsyn_lib.append(stlsyn)
+
+            # try:
+            #     (stlsyn, value, dur) = synth.synthSTLParam(templ, [val_dict], optmethod)
+            #     stlsyn_lib.append(stlsyn)
+            # except:
+            #     stlsyn_lib.append('')
 
     elif property_type == "until":
         for temp_idx, templ in enumerate(STL_templates[property_type]):
@@ -306,72 +374,6 @@ def generate_property_test(tensor_arr, property_type = "upper", mining_range = 2
 
 
 
-
-def generate_property(tensor_arr, property_type = "corr", mining_range = 2):
-    optmethod = "gradient"
-    up_bound    = torch.zeros(tensor_arr.shape[1]).to(device)        # shape: batch*hrs
-    low_bound   = torch.zeros(tensor_arr.shape[1]).to(device)        # shape: batch*hrs
-    property    = torch.zeros([tensor_arr.shape[0], tensor_arr.shape[1]]).to(device)
-    
-    for j in range(tensor_arr.shape[1]):
-        up_bound = torch.max(tensor_arr, 0)
-        low_bound = torch.min(tensor_arr, 0)
-
-    if property_type == "upper":
-        for temp_idx, templ in enumerate(STL_templates[property_type]):
-            try:
-                (stlsyn, value, dur) = synth.synthSTLParam(templ, conf_interval[:,2], optmethod)
-                property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
-            except:
-                property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = sliding_window[mining_range*temp_idx:mining_range*temp_idx+mining_range, 2]
-
-    elif property_type == "lower":
-        for temp_idx, templ in enumerate(STL_templates[property_type]):
-            try:
-                (stlsyn, value, dur) = synth.synthSTLParam(templ, conf_interval[:,1], optmethod)
-                property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
-            except:
-                property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = sliding_window[mining_range*temp_idx:mining_range*temp_idx+mining_range, 1]
-    
-    elif property_type == "until":
-        for temp_idx, templ in enumerate(STL_templates[property_type]):
-            conf_interval_dict = {
-                'x1': conf_interval[:,1].cpu().numpy(), # lower
-                'x2': conf_interval[:,2].cpu().numpy(), # upper
-            }
-            (stlsyn, value, dur) = synth.synthSTLParam(templ, [conf_interval_dict], optmethod)
-
-    elif property_type == "corr":
-        for temp_idx, templ in enumerate(STL_templates[property_type]):
-            val_dict = {
-                'x1': conf_interval[:,0].cpu().numpy(),       
-                'x2': conf_interval_guide[:,0].cpu().numpy(),  
-            }
-            (stlsyn, value, dur) = synth.synthSTLParam(templ, [val_dict], optmethod)
-            property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
-
-    elif property_type == "corr-upper":
-        for temp_idx, templ in enumerate(STL_templates[property_type]):
-            val_dict = {
-                'x1': conf_interval[:,2].cpu().numpy(),       
-                'x2': conf_interval_guide[:,2].cpu().numpy(),  
-            }
-            (stlsyn, value, dur) = synth.synthSTLParam(templ, [val_dict], optmethod)
-            property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
-
-    elif property_type == "corr-lower":
-        for temp_idx, templ in enumerate(STL_templates[property_type]):
-            val_dict = {
-                'x1': conf_interval[:,1].cpu().numpy(),       
-                'x2': conf_interval_guide[:,1].cpu().numpy(),  
-            }
-            (stlsyn, value, dur) = synth.synthSTLParam(templ, [val_dict], optmethod)
-            property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
-
-    else:
-        raise NotImplementedError
-    
-    return property
 
 
 
@@ -478,3 +480,69 @@ def get_robustness_score(tensor_arr, pred, property_type = "upper", mining_range
     return prop_score
 
 
+
+def generate_property(tensor_arr, property_type = "corr", mining_range = 2):
+    optmethod = "gradient"
+    up_bound    = torch.zeros(tensor_arr.shape[1]).to(device)        # shape: batch*hrs
+    low_bound   = torch.zeros(tensor_arr.shape[1]).to(device)        # shape: batch*hrs
+    property    = torch.zeros([tensor_arr.shape[0], tensor_arr.shape[1]]).to(device)
+    
+    for j in range(tensor_arr.shape[1]):
+        up_bound = torch.max(tensor_arr, 0)
+        low_bound = torch.min(tensor_arr, 0)
+
+    if property_type == "upper":
+        for temp_idx, templ in enumerate(STL_templates[property_type]):
+            try:
+                (stlsyn, value, dur) = synth.synthSTLParam(templ, conf_interval[:,2], optmethod)
+                property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
+            except:
+                property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = sliding_window[mining_range*temp_idx:mining_range*temp_idx+mining_range, 2]
+
+    elif property_type == "lower":
+        for temp_idx, templ in enumerate(STL_templates[property_type]):
+            try:
+                (stlsyn, value, dur) = synth.synthSTLParam(templ, conf_interval[:,1], optmethod)
+                property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
+            except:
+                property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = sliding_window[mining_range*temp_idx:mining_range*temp_idx+mining_range, 1]
+    
+    elif property_type == "until":
+        for temp_idx, templ in enumerate(STL_templates[property_type]):
+            conf_interval_dict = {
+                'x1': torch.max(tensor_arr[:,:,0], 0).values.cpu().detach().numpy(), # lower
+                'x2': torch.max(tensor_arr[:,:,0], 0).values.cpu().detach().numpy(), # upper
+            }
+            (stlsyn, value, dur) = synth.synthSTLParam(templ, [conf_interval_dict], optmethod)
+
+    elif property_type == "corr":
+        for temp_idx, templ in enumerate(STL_templates[property_type]):
+            val_dict = {
+                'x1': torch.max(tensor_arr[:,:,0], 0).values.cpu().detach().numpy(), # lower
+                'x2': torch.max(tensor_arr[:,:,0], 0).values.cpu().detach().numpy(), # upper
+            }
+            (stlsyn, value, dur) = synth.synthSTLParam(templ, [val_dict], optmethod)
+            property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
+
+    elif property_type == "corr-upper":
+        for temp_idx, templ in enumerate(STL_templates[property_type]):
+            val_dict = {
+                'x1': conf_interval[:,2].cpu().numpy(),       
+                'x2': conf_interval_guide[:,2].cpu().numpy(),  
+            }
+            (stlsyn, value, dur) = synth.synthSTLParam(templ, [val_dict], optmethod)
+            property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
+
+    elif property_type == "corr-lower":
+        for temp_idx, templ in enumerate(STL_templates[property_type]):
+            val_dict = {
+                'x1': conf_interval[:,1].cpu().numpy(),       
+                'x2': conf_interval_guide[:,1].cpu().numpy(),  
+            }
+            (stlsyn, value, dur) = synth.synthSTLParam(templ, [val_dict], optmethod)
+            property[:, mining_range*temp_idx:mining_range*temp_idx+mining_range] = stlsyn.subformula.bound
+
+    else:
+        raise NotImplementedError
+    
+    return property

@@ -21,9 +21,9 @@ def args_parser():
 
     # fine-tune args
     parser.add_argument('--fine_tune_iter', type=int, default=5)
-    parser.add_argument('--cluster_fine_tune_iter', type=int, default=4)
+    parser.add_argument('--cluster_fine_tune_iter', type=int, default=2)
     parser.add_argument('--local_updates', type=int, default=10, help="maximum number of local updates")
-    parser.add_argument('--client_iter', type=int, default=6, help="# of training iterations for clients")
+    parser.add_argument('--client_iter', type=int, default=10, help="# of training iterations for clients")
     parser.add_argument('--head_iter', type=int, default=8, help="fedrep setting")
     
     # training args
