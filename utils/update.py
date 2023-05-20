@@ -16,10 +16,6 @@ from find_trace import *
 from generate_STL import generate_property, generate_property_test, get_robustness_score
 
 
-# sys.path.append(os.getcwd())
-# from network import generate_square_subsequent_mask
-
-
 
 
 def property_loss_simp(y_pred, property, loss_function):
@@ -72,12 +68,42 @@ def repackage_hidden(h):
 
 
 def transformer_test(dataloader, net, args, loss_func):
-    pass
+    net.eval()
+
+    local_eps = args.client_iter  # local update epochs
+    src_mask = generate_square_subsequent_mask(dim1=24, dim2=120).cuda()
+    tgt_mask = generate_square_subsequent_mask(dim1=24, dim2=24).cuda()
+
+    epoch_loss = []
+    for iter in range(local_eps):
+        num_updates = 0
+        for name, param in net.named_parameters():
+            param.requires_grad = True 
+        
+        batch_loss = []
+        for X, y in dataloader:
+            net.eval()
+            X = X.unsqueeze(2)
+            output = net(src=X, tgt=X[:,-24:,:], src_mask=src_mask, tgt_mask=tgt_mask)
+            loss = loss_func(output.view(-1, 24), y)
+            
+            num_updates += 1
+            batch_loss.append(loss.item())
+            
+            if num_updates == args.local_updates:
+                break
+
+        epoch_loss.append(sum(batch_loss)/len(batch_loss))
+    
+    return net, sum(epoch_loss)/len(epoch_loss)
 
 
 
 
-def transformer_train(dataloader, net, args, loss_func, lr):
+def transformer_ditto_train(dataloader, net, args, loss_func, lr, w_ditto=None, lam=1):
+    
+    net.train()
+
     bias_p, weight_p = [], []
     for name, p in net.named_parameters():
         if 'bias' in name:
@@ -93,8 +119,73 @@ def transformer_train(dataloader, net, args, loss_func, lr):
     epoch_loss = []
     for iter in range(local_eps):
         num_updates = 0
+        
         for name, param in net.named_parameters():
             param.requires_grad = True 
+        
+        batch_loss = []
+        for batch_idx, (X, y) in enumerate(dataloader): ## batch first=True
+            w_0 = copy.deepcopy(net.state_dict())
+            net.train()
+            optimizer.zero_grad()
+            X = X.unsqueeze(2)
+            output = net(src=X, tgt=X[:,-24:,:], src_mask=src_mask, tgt_mask=tgt_mask)
+            loss = loss_func(output.view(-1, 24), y)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(net.parameters(), 0.5)
+            optimizer.step()
+
+            if w_ditto is not None:
+                w_net = copy.deepcopy(net.state_dict())
+                for key in w_net.keys():
+                    w_net[key] = w_net[key] - lr*lam*(w_0[key]-w_ditto[key])
+                net.load_state_dict(w_net)
+                optimizer.zero_grad()
+
+            num_updates += 1
+            batch_loss.append(loss.item())
+            
+            if num_updates == args.local_updates:
+                break
+
+        epoch_loss.append(sum(batch_loss)/len(batch_loss))
+    
+    return net, sum(epoch_loss)/len(epoch_loss)
+
+
+
+
+def transformer_train(dataloader, net, args, loss_func, lr, w_glob_keys=None):
+    bias_p, weight_p = [], []
+    for name, p in net.named_parameters():
+        if 'bias' in name:
+            bias_p += [p]
+        else:
+            weight_p += [p]
+    
+    optimizer = torch.optim.SGD([{'params': weight_p, 'weight_decay':0.0001}, {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
+    local_eps = args.client_iter  # local update epochs
+    src_mask = generate_square_subsequent_mask(dim1=24, dim2=120).cuda()
+    tgt_mask = generate_square_subsequent_mask(dim1=24, dim2=24).cuda()
+
+    epoch_loss = []
+    for iter in range(local_eps):
+        num_updates = 0
+        if args.method == 'FedRep' and iter < args.head_iter:
+            for name, param in net.named_parameters():
+                if name in w_glob_keys:
+                    param.requires_grad = False
+                else:
+                    param.requires_grad = True
+        elif args.method == 'FedRep' and iter >= args.head_iter:
+            for name, param in net.named_parameters():
+                if name in w_glob_keys:
+                    param.requires_grad = True
+                else:
+                    param.requires_grad = False
+        else:
+            for name, param in net.named_parameters():
+                param.requires_grad = True 
         
         batch_loss = []
         for batch_idx, (X, y) in enumerate(dataloader): ## batch first=True
@@ -128,84 +219,93 @@ class LocalUpdateProx(object):
         self.idxs = idxs  # client index
 
     def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001, mu=0.1, server_model=None):
-        # get weights/bias parameter names
-        bias_p, weight_p = [], []
-        for name, p in net.named_parameters():
-            if 'bias' in name:
-                bias_p += [p]
-            else:
-                weight_p += [p]
         
-        optimizer = torch.optim.SGD([
-            {'params': weight_p, 'weight_decay':0.0001}, 
-            {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
+        if net.model_type == 'transformer':
+            net, avg_ep_loss = transformer_train(self.ldr_train, net, self.args, self.loss_func, self.args.max_lr, w_glob_keys=w_glob_keys)
+            return net.state_dict(), avg_ep_loss, self.idxs
         
-        local_eps = self.args.client_iter  # local update epochs
-        epoch_loss = []
-        hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
-
-        for name, param in net.named_parameters():
-            param.requires_grad = True
-        
-        for it in range(local_eps):   # for # total local ep
-            num_updates = 0
-            batch_loss = []
-
-            for batch_idx, (X, y) in enumerate(self.ldr_train):
-                net.train()
-                optimizer.zero_grad()
-                hidden_1 = repackage_hidden(hidden_1)
-                hidden_2 = repackage_hidden(hidden_2)
-                output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
-                loss = self.loss_func(output, y)
-
-                if it>0:
-                    w_diff = torch.tensor(0., device=device)
-                    for w, w_t in zip(server_model.parameters(), net.parameters()):
-                        w_diff += torch.pow(torch.norm(w - w_t), 2)
-                    loss += mu / 2. * w_diff
-
-                loss.backward()
-                optimizer.step()
-
-                num_updates += 1
-                batch_loss.append(loss.item())
-
-                if num_updates == self.args.local_updates:
-                    break
-
-            epoch_loss.append(sum(batch_loss)/len(batch_loss))
-        return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
-    
-    
-    def test(self, net, w_glob_keys, dataset_test=None, ind=-1, idx=-1):
-        net.eval()
-        epoch_loss = []
-        num_updates = 0
-        if net.model_type != 'transformer':
+        else:
+            bias_p, weight_p = [], []
+            for name, p in net.named_parameters():
+                if 'bias' in name:
+                    bias_p += [p]
+                else:
+                    weight_p += [p]
+            
+            optimizer = torch.optim.SGD([
+                {'params': weight_p, 'weight_decay':0.0001}, 
+                {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
+            
+            local_eps = self.args.client_iter  # local update epochs
+            epoch_loss = []
             hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
 
             for name, param in net.named_parameters():
-                param.requires_grad = False 
+                param.requires_grad = True
+            
+            for it in range(local_eps):   # for # total local ep
+                num_updates = 0
+                batch_loss = []
 
-            batch_loss = []
-            batch_y_test = []
-            batch_pred_test = []
-            for X, y in self.ldr_train:
-                hidden_1 = repackage_hidden(hidden_1)
-                hidden_2 = repackage_hidden(hidden_2)
-                output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
-                loss = self.loss_func(output, y)
+                for batch_idx, (X, y) in enumerate(self.ldr_train):
+                    net.train()
+                    optimizer.zero_grad()
+                    hidden_1 = repackage_hidden(hidden_1)
+                    hidden_2 = repackage_hidden(hidden_2)
+                    output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
+                    loss = self.loss_func(output, y)
 
-                batch_y_test.append(y.detach().cpu().numpy())
-                batch_pred_test.append(output.detach().cpu().numpy())
-                
-                net.zero_grad()
-                num_updates += 1
-                batch_loss.append(loss.item())
+                    if it>0:
+                        w_diff = torch.tensor(0., device=device)
+                        for w, w_t in zip(server_model.parameters(), net.parameters()):
+                            w_diff += torch.pow(torch.norm(w - w_t), 2)
+                        loss += mu / 2. * w_diff
 
-            epoch_loss.append(sum(batch_loss)/len(batch_loss))
-        return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
+                    loss.backward()
+                    optimizer.step()
+                    num_updates += 1
+                    batch_loss.append(loss.item())
+                    if num_updates == self.args.local_updates:
+                        break
+
+                epoch_loss.append(sum(batch_loss)/len(batch_loss))
+            return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
+    
+    
+    def test(self, net, w_glob_keys, dataset_test=None, ind=-1, idx=-1):
+        
+        if net.model_type == 'transformer':
+            net, avg_ep_loss = transformer_test(self.ldr_train, net, self.args, self.loss_func)
+            return net.state_dict(), avg_ep_loss, self.idxs
+        
+        else:
+            net.eval()
+            epoch_loss = []
+            num_updates = 0
+            if net.model_type != 'transformer':
+                hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
+
+                for name, param in net.named_parameters():
+                    param.requires_grad = False 
+
+                batch_loss = []
+                batch_y_test = []
+                batch_pred_test = []
+                for X, y in self.ldr_train:
+                    hidden_1 = repackage_hidden(hidden_1)
+                    hidden_2 = repackage_hidden(hidden_2)
+                    output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
+                    loss = self.loss_func(output, y)
+
+                    batch_y_test.append(y.detach().cpu().numpy())
+                    batch_pred_test.append(output.detach().cpu().numpy())
+                    
+                    net.zero_grad()
+                    num_updates += 1
+                    batch_loss.append(loss.item())
+
+                epoch_loss.append(sum(batch_loss)/len(batch_loss))
+            return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
 
 
 
@@ -219,89 +319,103 @@ class LocalUpdateDitto(object):
         self.idxs = idxs  # client index
 
     def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001, w_ditto=None, lam=1):
-        net.train()
-        # get weights/bias parameter names
-        bias_p, weight_p = [], []
-        for name, p in net.named_parameters():
-            if 'bias' in name:
-                bias_p += [p]
-            else:
-                weight_p += [p]
         
-        optimizer = torch.optim.SGD([
-            {'params': weight_p, 'weight_decay':0.0001}, 
-            {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
+        if net.model_type == 'transformer':
+            net, avg_ep_loss = transformer_ditto_train(self.ldr_train, net, self.args, self.loss_func, self.args.max_lr, w_ditto=w_ditto, lam=lam)
+            return net.state_dict(), avg_ep_loss, self.idxs
         
-        local_eps = self.args.client_iter  # local update epochs
-        epoch_loss = []
-        hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
-
-        for name, param in net.named_parameters():
-            param.requires_grad = True
-        
-        for iter in range(local_eps):   # for # total local ep
-            num_updates = 0
-            batch_loss = []
-
-            for batch_idx, (X, y) in enumerate(self.ldr_train):
-                w_0 = copy.deepcopy(net.state_dict())
-                net.train()
-                net.zero_grad()
-                hidden_1 = repackage_hidden(hidden_1)
-                hidden_2 = repackage_hidden(hidden_2)
-                output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
-                loss = self.loss_func(output, y)
-                loss.backward()
-                optimizer.step()
-
-                if w_ditto is not None:
-                    w_net = copy.deepcopy(net.state_dict())
-                    for key in w_net.keys():
-                        w_net[key] = w_net[key] - lr*lam*(w_0[key]-w_ditto[key])
-                    net.load_state_dict(w_net)
-                    optimizer.zero_grad()
-
-                num_updates += 1
-                batch_loss.append(loss.item())
-                if num_updates == self.args.local_updates:
-                    break
-
-            epoch_loss.append(sum(batch_loss)/len(batch_loss))
-        return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
-        
-    def test(self, net, w_glob_keys, dataset_test=None, ind=-1, idx=-1):
-        net.eval()
-        epoch_loss = []
-        num_updates = 0
-        if net.model_type != 'transformer':
+        else:
+            net.train()
+            bias_p, weight_p = [], []
+            for name, p in net.named_parameters():
+                if 'bias' in name:
+                    bias_p += [p]
+                else:
+                    weight_p += [p]
+            
+            optimizer = torch.optim.SGD([
+                {'params': weight_p, 'weight_decay':0.0001}, 
+                {'params': bias_p, 'weight_decay':0}], lr=lr, momentum=0.5)
+            
+            local_eps = self.args.client_iter  # local update epochs
+            epoch_loss = []
             hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
 
             for name, param in net.named_parameters():
-                param.requires_grad = False 
+                param.requires_grad = True
+            
+            for iter in range(local_eps):   # for # total local ep
+                num_updates = 0
+                batch_loss = []
 
-            batch_loss = []
-            batch_y_test = []
-            batch_pred_test = []
-            for X, y in self.ldr_train:
-                hidden_1 = repackage_hidden(hidden_1)
-                hidden_2 = repackage_hidden(hidden_2)
-                output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
-                loss = self.loss_func(output, y)
+                for batch_idx, (X, y) in enumerate(self.ldr_train):
+                    w_0 = copy.deepcopy(net.state_dict())
+                    net.train()
+                    net.zero_grad()
+                    hidden_1 = repackage_hidden(hidden_1)
+                    hidden_2 = repackage_hidden(hidden_2)
+                    output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
+                    loss = self.loss_func(output, y)
+                    loss.backward()
+                    optimizer.step()
 
-                batch_y_test.append(y.detach().cpu().numpy())
-                batch_pred_test.append(output.detach().cpu().numpy())
-                
-                net.zero_grad()
-                num_updates += 1
-                batch_loss.append(loss.item())
+                    if w_ditto is not None:
+                        w_net = copy.deepcopy(net.state_dict())
+                        for key in w_net.keys():
+                            w_net[key] = w_net[key] - lr*lam*(w_0[key]-w_ditto[key])
+                        net.load_state_dict(w_net)
+                        optimizer.zero_grad()
 
-            epoch_loss.append(sum(batch_loss)/len(batch_loss))
-        return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
+                    num_updates += 1
+                    batch_loss.append(loss.item())
+                    if num_updates == self.args.local_updates:
+                        break
+
+                epoch_loss.append(sum(batch_loss)/len(batch_loss))
+
+            return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
+        
+
+    def test(self, net, w_glob_keys, dataset_test=None, ind=-1, idx=-1):
+
+        if net.model_type == 'transformer':
+            net, avg_ep_loss = transformer_test(self.ldr_train, net, self.args, self.loss_func)
+            return net.state_dict(), avg_ep_loss, self.idxs
+        
+        else:
+            net.eval()
+            epoch_loss = []
+            num_updates = 0
+
+            if net.model_type != 'transformer':
+                hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
+
+                for name, param in net.named_parameters():
+                    param.requires_grad = False 
+
+                batch_loss = []
+                batch_y_test = []
+                batch_pred_test = []
+                for X, y in self.ldr_train:
+                    hidden_1 = repackage_hidden(hidden_1)
+                    hidden_2 = repackage_hidden(hidden_2)
+                    output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
+                    loss = self.loss_func(output, y)
+
+                    batch_y_test.append(y.detach().cpu().numpy())
+                    batch_pred_test.append(output.detach().cpu().numpy())
+                    
+                    net.zero_grad()
+                    num_updates += 1
+                    batch_loss.append(loss.item())
+
+                epoch_loss.append(sum(batch_loss)/len(batch_loss))
+            return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
 
 
 
 
-# local updates for FedRep, FedPer, LG-FedAvg, FedAvg
+# local updates for FedRep, FedAvg
 class LocalUpdate(object):
     """
     Federated learning updating class for a single agent.
@@ -317,7 +431,7 @@ class LocalUpdate(object):
 
     def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001):
         if net.model_type == 'transformer':
-            net, avg_ep_loss = transformer_train(self.ldr_train, net, self.args, self.loss_func, lr)
+            net, avg_ep_loss = transformer_train(self.ldr_train, net, self.args, self.loss_func, self.args.max_lr, w_glob_keys=w_glob_keys)
             return net.state_dict(), avg_ep_loss, self.idxs
         
         else:
@@ -422,9 +536,14 @@ class LocalUpdate(object):
 
 
     def test(self, net, w_glob_keys, dataset_test=None, ind=-1, idx=-1):
-        epoch_loss = []
-        num_updates = 0
-        if net.model_type != 'transformer':
+        if net.model_type == 'transformer':
+            net, avg_ep_loss = transformer_test(self.ldr_train, net, self.args, self.loss_func)
+            return net.state_dict(), avg_ep_loss, self.idxs
+        
+        else:
+            epoch_loss = []
+            num_updates = 0
+
             hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
 
             for name, param in net.named_parameters():
@@ -448,7 +567,6 @@ class LocalUpdate(object):
                 batch_loss.append(loss.item())
 
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
-        
         
         return net.state_dict(), sum(epoch_loss)/len(epoch_loss), self.idxs
 
@@ -630,6 +748,10 @@ class LocalUpdateProp(object):
 
 
     def train(self, net, w_glob_keys, last=False, dataset_test=None, ind=-1, idx=-1, lr=0.001):
+        if net.model_type == 'transformer':
+            net, avg_ep_loss = transformer_train(self.ldr_train, net, self.args, self.loss_func, lr, w_glob_keys=w_glob_keys)
+            return net.state_dict(), avg_ep_loss, self.idxs
+            
         bias_p, weight_p = [], []
         for name, p in net.named_parameters():
             if 'bias' in name: 
@@ -715,8 +837,8 @@ class LocalUpdateProp(object):
             batch_loss = []
             batch_cons_loss = []
             
-            for X, y in self.ldr_val:
-            # for X, y in self.ldr_train:
+            # for X, y in self.ldr_val:
+            for X, y in self.ldr_train:
                 net.eval()
                 hidden_1 = repackage_hidden(hidden_1)
                 hidden_2 = repackage_hidden(hidden_2)

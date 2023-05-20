@@ -36,7 +36,7 @@ def model_init(args):
         elif args.model == 'RNN':
             glob_model = ShallowRegressionRNN(input_dim=2, batch_size=args.batch_size, time_steps=96, sequence_len=24, hidden_dim=16)
             clust_weight_keys = weight_keys_mapping['rnn']
-        elif args.model == 'Transformer':
+        elif args.model == 'transformer':
             glob_model = TimeSeriesTransformer()
             clust_weight_keys = weight_keys_mapping['transformer']
         else:
@@ -52,7 +52,7 @@ def model_init(args):
         elif args.model == 'RNN':
             glob_model = MultiRegressionRNN(input_dim=6, batch_size=args.batch_size, time_steps=40, sequence_len=10, hidden_dim=16)
             clust_weight_keys = weight_keys_mapping['rnn']
-        elif args.model == 'Transformer':
+        elif args.model == 'transformer':
             glob_model = TimeSeriesTransformer()
             clust_weight_keys = weight_keys_mapping['transformer']
         else:

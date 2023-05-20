@@ -29,24 +29,25 @@ import matplotlib.pyplot as plt
 
 
 def get_eval_model(net_path, net_type):
+    if net_type == 'GRU':
+        model = ShallowRegressionGRU(input_dim=2, batch_size=5, time_steps=96, sequence_len=24, hidden_dim=16)
+    elif net_type == 'LSTM':
+        model = ShallowRegressionLSTM(input_dim=2, batch_size=5, time_steps=96, sequence_len=24, hidden_dim=16)
+    elif net_type == 'RNN':
+        model = ShallowRegressionRNN(input_dim=2, batch_size=5, time_steps=96, sequence_len=24, hidden_dim=16)
+    model = to_device(model, 'cuda')
+    model.load_state_dict(torch.load(net_path))
+    
+    return model
     # if net_type == 'GRU':
-    #     model = ShallowRegressionGRU(input_dim=2, batch_size=5, time_steps=96, sequence_len=24, hidden_dim=16)
+    #         model = MultiRegressionGRU(input_dim=6, batch_size=64, time_steps=40, sequence_len=10, hidden_dim=16)
     # elif net_type == 'LSTM':
-    #     model = ShallowRegressionLSTM(input_dim=2, batch_size=5, time_steps=96, sequence_len=24, hidden_dim=16)
+    #     model = MultiRegressionLSTM(input_dim=6, batch_size=64, time_steps=40, sequence_len=10, hidden_dim=16)
     # elif net_type == 'RNN':
-    #     model = ShallowRegressionRNN(input_dim=2, batch_size=5, time_steps=96, sequence_len=24, hidden_dim=16)
+    #     model = MultiRegressionRNN(input_dim=6, batch_size=64, time_steps=40, sequence_len=10, hidden_dim=16)
     # model = to_device(model, 'cuda')
     # model.load_state_dict(torch.load(net_path))
     # return model
-    if net_type == 'GRU':
-            model = MultiRegressionGRU(input_dim=6, batch_size=64, time_steps=40, sequence_len=10, hidden_dim=16)
-    elif net_type == 'LSTM':
-        model = MultiRegressionLSTM(input_dim=6, batch_size=64, time_steps=40, sequence_len=10, hidden_dim=16)
-    elif net_type == 'RNN':
-        model = MultiRegressionRNN(input_dim=6, batch_size=64, time_steps=40, sequence_len=10, hidden_dim=16)
-    model = to_device(model, 'cuda')
-    model.load_state_dict(torch.load(net_path))
-    return model
 
 
 
@@ -214,7 +215,7 @@ def main():
             print("Mean:", np.mean(local_rho))
             print("Error bar:", error)
             print()
-            
+
 
         print("==============================================================")
         for type in model_types:

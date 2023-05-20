@@ -9,15 +9,15 @@ def args_parser():
     parser = argparse.ArgumentParser()
 
     # main args
-    parser.add_argument('--method', type=str, default="FedRep", choices=["Ditto", "FedAvg", "FedRep", "IFCA", "FedProx", "FedSTL"])
-    parser.add_argument('--model', type=str, default="LSTM", choices=["LSTM", "GRU", "RNN", "Transformer"])
+    parser.add_argument('--method', type=str, default="FedAvg", choices=["Ditto", "FedAvg", "FedRep", "IFCA", "FedProx", "FedSTL"])
+    parser.add_argument('--model', type=str, default="transformer", choices=["LSTM", "GRU", "RNN", "transformer"])
     parser.add_argument('--epoch', type=int, default=30, help="# of training epoch")
     parser.add_argument('--mode', type=str, default="train", choices=['train', 'train-logic', 'eval', 'eval-sumo'])
-    parser.add_argument('--dataset', type=str, default="sumo", choices=['sumo', 'fhwa'])
+    parser.add_argument('--dataset', type=str, default="fhwa", choices=['sumo', 'fhwa'])
     parser.add_argument('--client', type=int, default=100)
     parser.add_argument('--cluster', type=int, default=5)
     parser.add_argument('--frac', type=float, default=0.1, help="the fraction of clients: C")
-    parser.add_argument('--property_type', type=str, default='corr', help="type of property to mine", choices=['constraint', 'until', 'corr', 'infer', 'eventually'])
+    parser.add_argument('--property_type', type=str, default='constraint', help="type of property to mine", choices=['constraint', 'until', 'corr', 'infer', 'eventually'])
 
     # fine-tune args
     parser.add_argument('--fine_tune_iter', type=int, default=5)
