@@ -83,96 +83,96 @@ def main():
     if args.mode == "eval":
         model_types = ["RNN", "GRU", "LSTM"]
 
-        # print("==============================================================")
-        # for type in model_types:
-        #     print("Evaluating FedSTL on model (client teacher)", type)
-        #     local_loss = []
-        #     local_cons_loss = []
-        #     local_rho = []
+        print("==============================================================")
+        for type in model_types:
+            print("Evaluating FedSTL on model (client teacher)", type)
+            local_loss = []
+            local_cons_loss = []
+            local_rho = []
 
-        #     for c in range(args.client):
-        #         net_path = os.path.join(model_path, 'sumo_'+type+'_FedSTL_Client_'+str(c)+'_epoch_30.pt')
-        #         model = get_eval_model(net_path, type)
-        #         model.eval()
-        #         local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
-        #         loss, cons_loss, idx, rho_perc = local.test(net=model.to(args.device), idx=c, w_glob_keys=None, rho=True)
-        #         local_loss.append(copy.deepcopy(loss))
-        #         local_cons_loss.append(copy.deepcopy(cons_loss))
-        #         local_rho.append(copy.deepcopy(rho_perc.item()))
-        #         print(loss, cons_loss, idx, rho_perc)
+            for c in range(args.client):
+                net_path = os.path.join(model_path, 'sumo_'+type+'_FedSTL_Client_'+str(c)+'_epoch_30.pt')
+                model = get_eval_model(net_path, type)
+                model.eval()
+                local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
+                loss, cons_loss, idx, rho_perc = local.test(net=model.to(args.device), idx=c, w_glob_keys=None, rho=True)
+                local_loss.append(copy.deepcopy(loss))
+                local_cons_loss.append(copy.deepcopy(cons_loss))
+                local_rho.append(copy.deepcopy(rho_perc.item()))
+                print(loss, cons_loss, idx, rho_perc)
             
-        #     print("Local loss:")
-        #     std = np.std(local_loss)
-        #     error = 1.96 * std / np.sqrt(len(local_loss))
-        #     print("Mean:", np.mean(local_loss))
-        #     print("Error bar:", error)
-        #     print()
+            print("Local loss:")
+            std = np.std(local_loss)
+            error = 1.96 * std / np.sqrt(len(local_loss))
+            print("Mean:", np.mean(local_loss))
+            print("Error bar:", error)
+            print()
 
-        #     print("Local cons loss:")
-        #     std = np.std(local_cons_loss)
-        #     error = 1.96 * std / np.sqrt(len(local_cons_loss))
-        #     print("Mean:", np.mean(local_cons_loss))
-        #     print("Error bar:", error)
-        #     print()
+            print("Local cons loss:")
+            std = np.std(local_cons_loss)
+            error = 1.96 * std / np.sqrt(len(local_cons_loss))
+            print("Mean:", np.mean(local_cons_loss))
+            print("Error bar:", error)
+            print()
 
-        #     print("Local rho:")
-        #     std = np.std(local_rho)
-        #     error = 1.96 * std / np.sqrt(len(local_rho))
-        #     print("Mean:", np.mean(local_rho))
-        #     print("Error bar:", error)
-        #     print()
+            print("Local rho:")
+            std = np.std(local_rho)
+            error = 1.96 * std / np.sqrt(len(local_rho))
+            print("Mean:", np.mean(local_rho))
+            print("Error bar:", error)
+            print()
 
-        # print("==============================================================")
-        # for type in model_types:
-        #     print("Evaluating FedSTL on model", type)
-        #     local_loss = []
-        #     local_cons_loss = []
-        #     local_rho = []
+        print("==============================================================")
+        for type in model_types:
+            print("Evaluating FedSTL on model", type)
+            local_loss = []
+            local_cons_loss = []
+            local_rho = []
 
-        #     cluster_models = []
-        #     for c in range(args.cluster):
-        #         net_path = os.path.join(model_path, 'sumo_'+type+'_FedSTL_Cluster_'+str(c)+'_epoch_30.pt')
-        #         c_model = get_eval_model(net_path, type)
-        #         c_model.eval()
-        #         cluster_models.append(c_model)
+            cluster_models = []
+            for c in range(args.cluster):
+                net_path = os.path.join(model_path, 'sumo_'+type+'_FedSTL_Cluster_'+str(c)+'_epoch_30.pt')
+                c_model = get_eval_model(net_path, type)
+                c_model.eval()
+                cluster_models.append(c_model)
 
-        #     args.frac = 1
-        #     idxs_users = [i for i in range(args.client)]
-        #     cluster_id = cluster_id_property(cluster_models, client_dataset, args, idxs_users)   # cluster: clients
-        #     client2cluster = get_dict_keys(cluster_id, idxs_users)
+            args.frac = 1
+            idxs_users = [i for i in range(args.client)]
+            cluster_id = cluster_id_property(cluster_models, client_dataset, args, idxs_users)   # cluster: clients
+            client2cluster = get_dict_keys(cluster_id, idxs_users)
 
-        #     for c in range(args.client):
-        #         net_path = os.path.join(model_path, 'sumo_'+type+'_FedSTL_Client_'+str(c)+'_epoch_30.pt')
-        #         model = get_eval_model(net_path, type)
-        #         model.load_state_dict(cluster_models[client2cluster[c]].state_dict())
-        #         model.eval()
-        #         local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
-        #         loss, cons_loss, idx, rho_perc = local.test(net=model.to(args.device), idx=c, w_glob_keys=None, rho=True)
-        #         local_loss.append(copy.deepcopy(loss))
-        #         local_cons_loss.append(copy.deepcopy(cons_loss))
-        #         local_rho.append(copy.deepcopy(rho_perc.item()))
-        #         print(loss, cons_loss, idx, rho_perc)
+            for c in range(args.client):
+                net_path = os.path.join(model_path, 'sumo_'+type+'_FedSTL_Client_'+str(c)+'_epoch_30.pt')
+                model = get_eval_model(net_path, type)
+                model.load_state_dict(cluster_models[client2cluster[c]].state_dict())
+                model.eval()
+                local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
+                loss, cons_loss, idx, rho_perc = local.test(net=model.to(args.device), idx=c, w_glob_keys=None, rho=True)
+                local_loss.append(copy.deepcopy(loss))
+                local_cons_loss.append(copy.deepcopy(cons_loss))
+                local_rho.append(copy.deepcopy(rho_perc.item()))
+                print(loss, cons_loss, idx, rho_perc)
             
-        #     print("Local loss:")
-        #     std = np.std(local_loss)
-        #     error = 1.96 * std / np.sqrt(len(local_loss))
-        #     print("Mean:", np.mean(local_loss))
-        #     print("Error bar:", error)
-        #     print()
+            print("Local loss:")
+            std = np.std(local_loss)
+            error = 1.96 * std / np.sqrt(len(local_loss))
+            print("Mean:", np.mean(local_loss))
+            print("Error bar:", error)
+            print()
 
-        #     print("Local cons loss:")
-        #     std = np.std(local_cons_loss)
-        #     error = 1.96 * std / np.sqrt(len(local_cons_loss))
-        #     print("Mean:", np.mean(local_cons_loss))
-        #     print("Error bar:", error)
-        #     print()
+            print("Local cons loss:")
+            std = np.std(local_cons_loss)
+            error = 1.96 * std / np.sqrt(len(local_cons_loss))
+            print("Mean:", np.mean(local_cons_loss))
+            print("Error bar:", error)
+            print()
 
-        #     print("Local rho:")
-        #     std = np.std(local_rho)
-        #     error = 1.96 * std / np.sqrt(len(local_rho))
-        #     print("Mean:", np.mean(local_rho))
-        #     print("Error bar:", error)
-        #     print()
+            print("Local rho:")
+            std = np.std(local_rho)
+            error = 1.96 * std / np.sqrt(len(local_rho))
+            print("Mean:", np.mean(local_rho))
+            print("Error bar:", error)
+            print()
 
 
         print("==============================================================")
@@ -214,6 +214,7 @@ def main():
             print("Mean:", np.mean(local_rho))
             print("Error bar:", error)
             print()
+            
 
         print("==============================================================")
         for type in model_types:
