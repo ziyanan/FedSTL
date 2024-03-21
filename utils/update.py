@@ -205,11 +205,7 @@ def transformer_prop_train(dataloader, net, args, loss_func, lr, w_glob_keys=Non
             output = net(src=X, tgt=X[:,-24:,:], src_mask=src_mask, tgt_mask=tgt_mask)
             pred_loss = loss_func(output.view(-1, 24), y)
 
-            if args.property_type == 'corr':
-                property_mined = generate_property(X, property_type = "corr")
-                cons_loss = loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
-            
-            elif args.property_type == 'constraint':
+            if args.property_type == 'constraint':
                 property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
                 corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
                 property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
@@ -233,84 +229,127 @@ def transformer_prop_train(dataloader, net, args, loss_func, lr, w_glob_keys=Non
 
 
 
+def transformer_prop_teacher_test(dataloader, net, args, loss_func, rho=False):
+    net.eval()
+    m = nn.ReLU()
+    src_mask = generate_square_subsequent_mask(dim1=24, dim2=120).cuda()
+    tgt_mask = generate_square_subsequent_mask(dim1=24, dim2=24).cuda()
+        
+    for name, param in net.named_parameters():
+        param.requires_grad = False 
+
+    batch_rho = []
+    batch_loss = []
+    batch_cons_loss = []
+    for X, y in dataloader:
+        net.eval()
+        X = X.unsqueeze(2)
+        output = net(src=X, tgt=X[:,-24:,:], src_mask=src_mask, tgt_mask=tgt_mask)
+        output = output.view(-1, 24)
+    
+        if args.property_type == 'constraint':
+            property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
+            corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
+            property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
+            corrected_trace_lower = convert_best_trace(stl_lib_lower, output)
+            teacher_pred = torch.min(output, corrected_trace_upper)
+            teacher_pred = torch.max(output, corrected_trace_lower)
+            output = teacher_pred
+            cons_loss = loss_func(output, corrected_trace_upper) + loss_func(output, corrected_trace_lower)
+        elif args.property_type == 'eventually':
+            property_upper, _ = generate_property_test(X, property_type = "eventually-upper")
+            property_lower, _ = generate_property_test(X, property_type = "eventually-lower")
+            cons_loss = property_loss_eventually(output, property_upper, m, "eventually-upper") + property_loss_eventually(output, property_lower, self.m, "eventually-lower")
+        else:
+            raise NotImplementedError
+        pred_loss = loss_func(output, y)
+        batch_loss.append(pred_loss.item())
+        batch_cons_loss.append(cons_loss.item())
+
+        if rho==True:
+            if args.property_type == 'constraint':
+                batch_rho.append( 1-torch.count_nonzero(m(corrected_trace_upper - output))/len(corrected_trace_upper)/corrected_trace_upper.shape[1] )
+                batch_rho.append( 1-torch.count_nonzero(m(output - corrected_trace_lower))/len(corrected_trace_lower)/corrected_trace_lower.shape[1] )
+                
+            elif args.property_type == 'eventually':
+                iterval = 2
+                diff_yp = output - property_upper
+                unsqueezed_diff = diff_yp.view(diff_yp.shape[0], int(diff_yp.shape[1]//iterval), iterval)
+                diff_min, ind = torch.min(m(unsqueezed_diff), dim=2)
+                batch_rho.append( 1-torch.count_nonzero(diff_min) / len(diff_min) / diff_min.shape[1] )
+                diff_yp = property_lower - output
+                unsqueezed_diff = diff_yp.view(diff_yp.shape[0], int(diff_yp.shape[1]//iterval), iterval)
+                diff_min, ind = torch.min(m(unsqueezed_diff), dim=2)
+                batch_rho.append( 1-torch.count_nonzero(diff_min) / len(diff_min) / diff_min.shape[1] )
+            else:
+                raise NotImplementedError
+    
+    if rho==True:
+        return net, sum(batch_loss)/len(batch_loss), sum(batch_cons_loss)/len(batch_cons_loss), sum(batch_rho)/len(batch_rho)
+    else:
+        return net, sum(batch_loss)/len(batch_loss), sum(batch_cons_loss)/len(batch_cons_loss)
+
+
+
+
 
 def transformer_prop_test(dataloader, net, args, loss_func, rho=False):
     net.eval()
     m = nn.ReLU()
-    local_eps = args.client_iter  # local update epochs
     src_mask = generate_square_subsequent_mask(dim1=24, dim2=120).cuda()
     tgt_mask = generate_square_subsequent_mask(dim1=24, dim2=24).cuda()
-
-    epoch_loss = []
-    epoch_rho = []
-    epoch_cons_loss = []
-    for iter in range(local_eps):
         
-        for name, param in net.named_parameters():
-            param.requires_grad = False 
+    for name, param in net.named_parameters():
+        param.requires_grad = False 
 
-        batch_rho = []
-        batch_loss = []
-        batch_cons_loss = []
+    batch_rho = []
+    batch_loss = []
+    batch_cons_loss = []
+    
+    for X, y in dataloader:
+        net.eval()
+        X = X.unsqueeze(2)
+        output = net(src=X, tgt=X[:,-24:,:], src_mask=src_mask, tgt_mask=tgt_mask)
         
-        for X, y in dataloader:
-            net.eval()
-            X = X.unsqueeze(2)
-            output = net(src=X, tgt=X[:,-24:,:], src_mask=src_mask, tgt_mask=tgt_mask)
-            pred_loss = loss_func(output.view(-1, 24), y)
-            batch_loss.append(pred_loss.item())
+        if args.property_type == 'constraint':
+            property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
+            corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
+            property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
+            corrected_trace_lower = convert_best_trace(stl_lib_lower, output)
+            cons_loss = loss_func(output, corrected_trace_upper) + loss_func(output, corrected_trace_lower)
+        elif args.property_type == 'eventually':
+            property_upper, _ = generate_property_test(X, property_type = "eventually-upper")
+            property_lower, _ = generate_property_test(X, property_type = "eventually-lower")
+            cons_loss = property_loss_eventually(output, property_upper, m, "eventually-upper") + property_loss_eventually(output, property_lower, self.m, "eventually-lower")
+        else:
+            raise NotImplementedError
+        
+        pred_loss = loss_func(output.view(-1, 24), y)
+        batch_loss.append(pred_loss.item())
+        batch_cons_loss.append(cons_loss.item())
 
-            if args.property_type == 'corr':
-                    property_mined = generate_property(X, property_type = 'corr')
-                    cons_loss = loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
-            elif args.property_type == 'constraint':
-                property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
-                corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
-                property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
-                corrected_trace_lower = convert_best_trace(stl_lib_lower, output)
-                cons_loss = loss_func(output, corrected_trace_upper) + loss_func(output, corrected_trace_lower)
+        if rho==True:
+            if args.property_type == 'constraint':
+                batch_rho.append( 1-torch.count_nonzero(m(corrected_trace_lower - output))/len(corrected_trace_lower)/corrected_trace_lower.shape[1] )
+                batch_rho.append( 1-torch.count_nonzero(m(output - corrected_trace_upper))/len(corrected_trace_upper)/corrected_trace_upper.shape[1] )
+            
             elif args.property_type == 'eventually':
-                property_upper, _ = generate_property_test(X, property_type = "eventually-upper")
-                property_lower, _ = generate_property_test(X, property_type = "eventually-lower")
-                cons_loss = property_loss_eventually(output, property_upper, m, "eventually-upper") + property_loss_eventually(output, property_lower, self.m, "eventually-lower")
+                iterval = 2
+                diff_yp = output - property_upper
+                unsqueezed_diff = diff_yp.view(diff_yp.shape[0], int(diff_yp.shape[1]//iterval), iterval)
+                diff_min, ind = torch.min(m(unsqueezed_diff), dim=2)
+                batch_rho.append( 1-torch.count_nonzero(diff_min) / len(diff_min) / diff_min.shape[1] )
+                diff_yp = property_lower - output
+                unsqueezed_diff = diff_yp.view(diff_yp.shape[0], int(diff_yp.shape[1]//iterval), iterval)
+                diff_min, ind = torch.min(m(unsqueezed_diff), dim=2)
+                batch_rho.append( 1-torch.count_nonzero(diff_min) / len(diff_min) / diff_min.shape[1] )
             else:
                 raise NotImplementedError
-            
-            
-            batch_cons_loss.append(cons_loss.item())
-
-            if rho==True:
-                if args.property_type == 'corr':
-                    diff_out = torch.mean(output[:,:-1,0], dim=0)-torch.mean(output[:,:-1,1], dim=0)
-                    diff_mine = property_mined[0,1:]
-                    batch_rho.append( 1-torch.count_nonzero(m(diff_mine - diff_out))/len(diff_out) )
-                
-                elif args.property_type == 'constraint':
-                    batch_rho.append( 1-torch.count_nonzero(m(corrected_trace_lower - output))/len(corrected_trace_lower)/corrected_trace_lower.shape[1] )
-                    batch_rho.append( 1-torch.count_nonzero(m(output - corrected_trace_upper))/len(corrected_trace_upper)/corrected_trace_upper.shape[1] )
-                
-                elif args.property_type == 'eventually':
-                    iterval = 2
-                    diff_yp = output - property_upper
-                    unsqueezed_diff = diff_yp.view(diff_yp.shape[0], int(diff_yp.shape[1]//iterval), iterval)
-                    diff_min, ind = torch.min(m(unsqueezed_diff), dim=2)
-                    batch_rho.append( 1-torch.count_nonzero(diff_min) / len(diff_min) / diff_min.shape[1] )
-                    diff_yp = property_lower - output
-                    unsqueezed_diff = diff_yp.view(diff_yp.shape[0], int(diff_yp.shape[1]//iterval), iterval)
-                    diff_min, ind = torch.min(m(unsqueezed_diff), dim=2)
-                    batch_rho.append( 1-torch.count_nonzero(diff_min) / len(diff_min) / diff_min.shape[1] )
-                else:
-                    raise NotImplementedError
-
-        epoch_loss.append(sum(batch_loss)/len(batch_loss))
-        epoch_cons_loss.append(sum(batch_cons_loss)/len(batch_cons_loss))
-        if rho==True:
-            epoch_rho.append(sum(batch_rho)/len(batch_rho))
     
     if rho==True:
-        return net, sum(epoch_loss)/len(epoch_loss), sum(epoch_cons_loss)/len(epoch_cons_loss), sum(epoch_rho)/len(epoch_rho)
+        return net, sum(batch_loss)/len(batch_loss), sum(batch_cons_loss)/len(batch_cons_loss), sum(batch_rho)/len(batch_rho)
     else:
-        return net, sum(epoch_loss)/len(epoch_loss), sum(epoch_cons_loss)/len(epoch_cons_loss)
+        return net, sum(batch_loss)/len(batch_loss), sum(batch_cons_loss)/len(batch_cons_loss)
 
 
 
@@ -829,6 +868,7 @@ def cluster_id_property(cluster_models, client_dataset, args, idxs_users):
     cluster_loss = np.full((args.cluster, args.client), np.inf)
     
     for cluster in range(args.cluster):
+        print(cluster)
         for c in idxs_users:
             local = LocalUpdateProp(args=args, dataset=client_dataset[c], idxs=c)
             w_local, loss, cons_loss, idx = local.test(net=cluster_models[cluster] .to(args.device), idx=c, w_glob_keys=None)
@@ -841,6 +881,7 @@ def cluster_id_property(cluster_models, client_dataset, args, idxs_users):
     client_lst = [c for c in idxs_users]
     i = 0
     while i < len(idxs_users):
+        print(i)
         min_index = np.argwhere(cluster_loss == np.min(cluster_loss))
         if len(cluster_id[min_index[0][0]]) < int(args.client*args.frac/args.cluster) and min_index[0][1] in client_lst:
             cluster_id[min_index[0][0]].append(min_index[0][1])
@@ -893,11 +934,7 @@ def cluster_explore(net, w_glob_keys, lr, args, dataloaders):
                 output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
                 pred_loss = loss_func(output, y)
                 
-                if args.property_type == 'corr':
-                    property_mined = generate_property(X, property_type = args.property_type)
-                    cons_loss = loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
-                
-                elif args.property_type == 'constraint':
+                if args.property_type == 'constraint':
                     property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
                     corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
                     property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
@@ -980,11 +1017,7 @@ class LocalUpdateProp(object):
                     output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
                     pred_loss = self.loss_func(output, y)
                     
-                    if self.args.property_type == 'corr':
-                        property_mined = generate_property(X, property_type = "corr")
-                        cons_loss = self.loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
-                    
-                    elif self.args.property_type == 'constraint':
+                    if self.args.property_type == 'constraint':
                         property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
                         corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
                         property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
@@ -992,8 +1025,8 @@ class LocalUpdateProp(object):
                         cons_loss = self.loss_func(output, corrected_trace_upper) + self.loss_func(output, corrected_trace_lower)
 
                     elif self.args.property_type == 'eventually':
-                        property_upper, stl_lib = generate_property_test(X, property_type = "eventually-upper")
-                        property_lower, stl_lib = generate_property_test(X, property_type = "eventually-lower")
+                        property_upper, _ = generate_property_test(X, property_type = "eventually-upper")
+                        property_lower, _ = generate_property_test(X, property_type = "eventually-lower")
                         cons_loss = property_loss_eventually(output, property_upper, self.m, "eventually-upper") + property_loss_eventually(output, property_lower, self.m, "eventually-lower")
                     
                     else:
@@ -1025,11 +1058,10 @@ class LocalUpdateProp(object):
 
         if net.model_type == 'transformer':
             if rho == True:
-                net, ep_ls, ep_cons_ls, ep_rho= transformer_prop_test(self.ldr_train, net, self.args, self.loss_func, rho=True)
-                # net, ep_ls, ep_cons_ls, ep_rho= transformer_prop_test(self.ldr_val, net, self.args, self.loss_func, rho=True)
-                return net.state_dict(), ep_ls, ep_cons_ls, self.idxs, ep_rho
+                net, ep_ls, ep_cons_ls, ep_rho= transformer_prop_test(self.ldr_val, net, self.args, self.loss_func, rho=True)
+                return ep_ls, ep_cons_ls, self.idxs, ep_rho
             else:
-                net, ep_ls, ep_cons_ls = transformer_prop_test(self.ldr_train, net, self.args, self.loss_func, rho=False)
+                net, ep_ls, ep_cons_ls = transformer_prop_test(self.ldr_val, net, self.args, self.loss_func, rho=False)
                 return net.state_dict(), ep_ls, ep_cons_ls, self.idxs
 
         else:
@@ -1042,8 +1074,7 @@ class LocalUpdateProp(object):
             batch_loss = []
             batch_cons_loss = []
             
-            # for X, y in self.ldr_val:
-            for X, y in self.ldr_train:
+            for X, y in self.ldr_val:
                 net.eval()
                 hidden_1 = repackage_hidden(hidden_1)
                 hidden_2 = repackage_hidden(hidden_2)
@@ -1051,11 +1082,7 @@ class LocalUpdateProp(object):
                 pred_loss = self.loss_func(output, y)
                 batch_loss.append(pred_loss.item())
                 
-                if self.args.property_type == 'corr':
-                    property_mined = generate_property(X, property_type = 'corr')
-                    cons_loss = self.loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
-                
-                elif self.args.property_type == 'constraint':
+                if self.args.property_type == 'constraint':
                     property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
                     corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
                     property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
@@ -1071,12 +1098,7 @@ class LocalUpdateProp(object):
                 batch_cons_loss.append(cons_loss.item())
 
                 if rho==True:
-                    if self.args.property_type == 'corr':
-                        diff_out = torch.mean(output[:,:-1,0], dim=0)-torch.mean(output[:,:-1,1], dim=0)
-                        diff_mine = property_mined[0,1:]
-                        batch_rho.append( 1-torch.count_nonzero(m(diff_mine - diff_out))/len(diff_out) )
-                    
-                    elif self.args.property_type == 'constraint':
+                    if self.args.property_type == 'constraint':
                         batch_rho.append( 1-torch.count_nonzero(m(corrected_trace_lower - output))/len(corrected_trace_lower)/corrected_trace_lower.shape[1] )
                         batch_rho.append( 1-torch.count_nonzero(m(output - corrected_trace_upper))/len(corrected_trace_upper)/corrected_trace_upper.shape[1] )
                     
@@ -1113,7 +1135,15 @@ class LocalUpdateProp(object):
         epoch_cons_loss = []
         num_updates = 0
 
-        if net.model_type != 'transformer':
+        if net.model_type == 'transformer':
+            if rho == True:
+                net, ep_ls, ep_cons_ls, ep_rho= transformer_prop_teacher_test(self.ldr_val, net, self.args, self.loss_func, rho=True)
+                return ep_ls, ep_cons_ls, self.idxs, ep_rho
+            else:
+                net, ep_ls, ep_cons_ls = transformer_prop_teacher_test(self.ldr_val, net, self.args, self.loss_func, rho=False)
+                return net.state_dict(), ep_ls, ep_cons_ls, self.idxs
+        
+        else:
             hidden_1, hidden_2 = net.init_hidden(), net.init_hidden()
 
             for name, param in net.named_parameters():
@@ -1128,11 +1158,7 @@ class LocalUpdateProp(object):
                 hidden_2 = repackage_hidden(hidden_2)
                 output, hidden_1, hidden_2 = net(X, hidden_1, hidden_2)
                 
-                if self.args.property_type == 'corr':
-                    property_mined = generate_property(X, property_type = self.args.property_type)
-                    cons_loss = self.loss_func(torch.mean(output[:,:,0], dim=0)-torch.mean(output[:,:,1], dim=0), property_mined[0])
-                
-                elif self.args.property_type == 'constraint':
+                if self.args.property_type == 'constraint':
                     property_upper, stl_lib_upper = generate_property_test(X, property_type = "upper")
                     corrected_trace_upper = convert_best_trace(stl_lib_upper, output)
                     property_lower, stl_lib_lower = generate_property_test(X, property_type = "lower")
@@ -1152,12 +1178,7 @@ class LocalUpdateProp(object):
                 batch_cons_loss.append(cons_loss.item())
 
                 if rho==True:
-                    if self.args.property_type == 'corr':
-                        diff_out = torch.mean(output[:,:-1,0], dim=0)-torch.mean(output[:,:-1,1], dim=0)
-                        diff_mine = property_mined[0,1:]
-                        batch_rho.append( 1-torch.count_nonzero(m(diff_mine - diff_out))/len(diff_out) )
-                    
-                    elif self.args.property_type == 'constraint':
+                    if self.args.property_type == 'constraint':
                         batch_rho.append( 1-torch.count_nonzero(m(corrected_trace_upper - output))/len(corrected_trace_upper)/corrected_trace_upper.shape[1] )
                         batch_rho.append( 1-torch.count_nonzero(m(output - corrected_trace_lower))/len(corrected_trace_lower)/corrected_trace_lower.shape[1] )
                     

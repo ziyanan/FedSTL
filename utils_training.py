@@ -139,7 +139,7 @@ def get_shared_dataset(client_id, dataset_name):
 
     dataset_len = [len(train_dataset), len(val_dataset), len(test_dataset)]
     train_loader_private = DataLoader(train_dataset, batch_size=64, shuffle=True, drop_last=True)
-    val_loader = DataLoader(val_dataset, batch_size=64, drop_last=True)
-    test_loader = DataLoader(test_dataset, batch_size=64, drop_last=True)
+    val_loader = DataLoader(val_dataset, batch_size=5, drop_last=True)
+    test_loader = DataLoader(test_dataset, batch_size=5, drop_last=True)
 
     return train_loader_private, [dataset_array["train_x"][:public_len], dataset_array["train_y"][:public_len]], val_loader, test_loader, dataset_len

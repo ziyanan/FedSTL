@@ -8,6 +8,7 @@ with options to compare with other benchmarks.
 
 import numpy as np
 import torch
+import sys
 from torch.utils.data import DataLoader
 from IoTData import SequenceDataset
 from utils.update import LocalUpdate, LocalUpdateProp, compute_cluster_id, cluster_id_property, cluster_explore
@@ -24,9 +25,7 @@ torch.cuda.manual_seed_all(0)
 import matplotlib.pyplot as plt
 
 ## save results to txt log file.
-# stdoutOrigin=sys.stdout 
-# sys.stdout = open("log.txt", "a")
-
+stdoutOrigin=sys.stdout
 
 
 def get_dict_keys(cluster_id, idxs_users):
@@ -43,6 +42,7 @@ def get_dict_keys(cluster_id, idxs_users):
 def main():
     args = args_parser()
     args.device = get_device()
+    sys.stdout = open("log/FedSTL"+str(args.model)+".txt", "a")
     
     client_dataset = {}
     for c in range(args.client):
@@ -315,5 +315,5 @@ if __name__ == '__main__':
     
     finally:
         print('\nDone.')
-        # sys.stdout.close()
-        # sys.stdout=stdoutOrigin
+        sys.stdout.close()
+        sys.stdout=stdoutOrigin
